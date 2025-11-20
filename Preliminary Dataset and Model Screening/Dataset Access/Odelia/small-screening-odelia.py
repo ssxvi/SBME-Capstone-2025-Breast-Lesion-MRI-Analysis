@@ -1,16 +1,34 @@
-#To be addedfrom pathlib import Path
+from pathlib import Path
 from datasets import load_dataset
 import torchio as tio 
 import numpy as np 
 import pandas as pd
 from tqdm import tqdm
 
+# This is the MODIFIED ODELIA CODE for small sample test - T
 
 # --------------------- Settings ---------------------
 repo_id = "ODELIA-AI/ODELIA-Challenge-2025"
 config = "unilateral"  # "default" or "unilateral"
-output_root = Path("./dataset_downloaded")
+output_root = Path("./Odelia/data")
 
+
+# Limit and label filtering
+max_samples = 10
+candidate_label_keys = [
+    "Label", "label", "Target", "target",
+    "Diagnosis", "diagnosis", "Pathology", "pathology",
+    "Malignancy", "malignancy", "Lesion_Type", "lesion_type"
+]
+
+
+def item_has_any_label_fields(item: dict, label_keys: list[str]) -> bool:
+    for key in label_keys:
+        if key in item:
+            value = item[key]
+            if value is not None and not pd.isna(value):
+                return True
+    return False
 
 # Load dataset in streaming mode
 dataset = load_dataset(repo_id, name=config, streaming=True)
@@ -28,9 +46,15 @@ dir_config = {
 
 # Process dataset
 metadata = []
+num_kept = 0
+reached_limit = False
 for split, split_dataset in dataset.items():
+    if reached_limit:
+        break
     print("-------- Start Download - Split: ", split, " --------")
     for item in tqdm(split_dataset, desc="Downloading"):  # Stream data one-by-one
+        if not item_has_any_label_fields(item, candidate_label_keys):
+            continue
         uid = item["UID"]
         institution = item["Institution"]
         img_names = [name.split("Image_")[1] for name in item.keys() if name.startswith("Image")]
@@ -56,7 +80,11 @@ for split, split_dataset in dataset.items():
             img.save(path_folder / f"{img_name}.nii.gz")
 
         # Store metadata
-        metadata.append(item)  
+        metadata.append(item)
+        num_kept += 1
+        if num_kept >= max_samples:
+            reached_limit = True
+            break
 
 
 
