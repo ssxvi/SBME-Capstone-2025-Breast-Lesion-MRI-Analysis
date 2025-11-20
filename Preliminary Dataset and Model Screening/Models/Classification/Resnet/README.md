@@ -2,6 +2,8 @@
 
 This repository contains a complete training pipeline for breast MRI lesion detection using ResNet50.
 
+*NOTE* reconfigure to match odelia streaming 
+
 ## Features
 
 - **ResNet50 Architecture**: Pre-trained on ImageNet, fine-tuned for breast MRI lesion classification
