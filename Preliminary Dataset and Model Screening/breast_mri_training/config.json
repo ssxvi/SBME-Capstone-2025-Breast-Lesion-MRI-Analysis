@@ -1,0 +1,17 @@
+{
+    "data_dir": "./data/breast_mri",
+    "input_channels": 1,
+    "image_size": 224,
+    "pretrained": true,
+    "epochs": 50,
+    "batch_size": 16,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001,
+    "scheduler": "plateau",
+    "num_workers": 4,
+    "output_dir": "./outputs/breast_mri_resnet50",
+    "save_interval": 10,
+    "early_stopping_patience": 15,
+    "class_weights": true
+}
+
