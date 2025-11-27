@@ -35,7 +35,12 @@ class ResNet50Classifier(nn.Module):
         super(ResNet50Classifier, self).__init__()
         
         # Load pretrained ResNet50
-        self.resnet = models.resnet50(pretrained=pretrained)
+        if pretrained:
+            # Use weights parameter instead of deprecated pretrained parameter
+            weights = models.ResNet50_Weights.IMAGENET1K_V1
+            self.resnet = models.resnet50(weights=weights)
+        else:
+            self.resnet = models.resnet50(weights=None)
         
         # Modify first layer if input is grayscale
         if input_channels == 1:
@@ -45,7 +50,8 @@ class ResNet50Classifier(nn.Module):
             )
             # Initialize with pretrained weights (average across RGB channels)
             if pretrained:
-                pretrained_weights = models.resnet50(pretrained=True).conv1.weight
+                pretrained_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+                pretrained_weights = pretrained_model.conv1.weight
                 self.resnet.conv1.weight = nn.Parameter(
                     pretrained_weights.mean(dim=1, keepdim=True)
                 )
@@ -284,11 +290,26 @@ def main(args):
     if args.class_weights:
         # Calculate class weights from training set
         class_counts = train_dataset.get_class_counts()
-        total = sum(class_counts.values())
-        class_weights = [total / (len(class_counts) * class_counts[i]) for i in range(len(class_counts))]
+        num_classes = train_dataset.num_classes
+        
+        # Ensure we have counts for all classes (even if 0)
+        counts = [class_counts.get(i, 0) for i in range(num_classes)]
+        total = sum(counts)
+        
+        # Calculate weights, handling zero counts
+        class_weights = []
+        for i in range(num_classes):
+            if counts[i] > 0:
+                weight = total / (num_classes * counts[i])
+            else:
+                # If a class has no samples, use a default weight (e.g., 1.0 or average)
+                weight = 1.0
+            class_weights.append(weight)
+        
         class_weights = torch.FloatTensor(class_weights).to(device)
         criterion = nn.CrossEntropyLoss(weight=class_weights)
         print(f'Using class weights: {class_weights.cpu().numpy()}')
+        print(f'Class counts: {dict(enumerate(counts))}')
     else:
         criterion = nn.CrossEntropyLoss()
     

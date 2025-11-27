@@ -1,0 +1,17 @@
+{
+    "data_dir": "C:\\Programming\\SBME-Capstone-2025-Breast-Lesion-MRI-Analysis\\Preliminary Dataset and Model Screening\\Dataset Access\\Odelia\\resnet_data",
+    "input_channels": 1,
+    "image_size": 224,
+    "pretrained": true,
+    "epochs": 5,
+    "batch_size": 16,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001,
+    "scheduler": "plateau",
+    "num_workers": 4,
+    "output_dir": "./outputs/breast_mri_resnet50_odelia",
+    "save_interval": 10,
+    "early_stopping_patience": 15,
+    "class_weights": true
+}
+

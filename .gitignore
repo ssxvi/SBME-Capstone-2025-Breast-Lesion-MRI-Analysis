@@ -1,2 +1,6 @@
 # do not commit data folder, please run and generate data instead por favor :D
 data/*
+data_unilateral/*
+data_unilateral/*
+class0/*
+class1/*
