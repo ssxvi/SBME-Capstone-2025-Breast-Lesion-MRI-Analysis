@@ -12,6 +12,7 @@ import torch.utils.data
 # import torchvision.transforms as transforms
 # import torchvision.datasets as datasets
 from torch.utils.tensorboard import SummaryWriter
+from datetime import datetime
 
 #import densenet as dn
 from model.tiramisu import FCDenseNet103 as dn
@@ -62,7 +63,7 @@ def main():
     # print("Using device:", torch.device("cpu"))
     global args, best_prec1, writer
     args = parser.parse_args()
-    log_dir=f'./runs/{args.name}'
+    log_dir=f'./runs/{args.name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
     #for logging to tensorboard
     writer = SummaryWriter(log_dir=log_dir)
 
@@ -84,8 +85,8 @@ def main():
     checkpoints = os.makedirs(f"{output_dir}/checkpoints", exist_ok=True)
 
     #End Joan Edit
-    train_loader = torch.utils.data.DataLoader(train_dataset,batch_size=args.batch_size, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset,batch_size=args.batch_size, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_dataset,batch_size=args.batch_size, shuffle=True, num_workers=4)
+    val_loader = torch.utils.data.DataLoader(val_dataset,batch_size=args.batch_size, shuffle=False, num_workers=4)
 
     # create model
     model = dn(1)
@@ -94,7 +95,7 @@ def main():
     print('Number of model parameters: {}'.format(
         sum([p.data.nelement() for p in model.parameters()])))
   
-    device = torch.device("cpu")
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     
     model = model.to(device)
 
@@ -137,10 +138,10 @@ def main():
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch)
+        train(train_loader, model, criterion, optimizer, epoch, device)
 
         # evaluate on validation set
-        prec1 = validate(val_loader, model, criterion, epoch)
+        prec1 = validate(val_loader, model, criterion, epoch, device)
 
         # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
@@ -154,7 +155,7 @@ def main():
     print('Best accuracy: ', best_prec1)
     writer.close()
 
-def train(train_loader, model, criterion, optimizer, epoch):
+def train(train_loader, model, criterion, optimizer, epoch, device):
     """Train for one epoch on the training set"""
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -163,7 +164,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
     spec1 = AverageMeter()
     acc1 = AverageMeter()
 
-    device = torch.device("cpu")
 
     # switch to train mode
     model.train()
@@ -220,7 +220,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
     writer.add_scalar('train/specificity', spec1.avg, epoch)
     writer.add_scalar('train/accuracy', acc1.avg, epoch)    
 
-def validate(val_loader, model, criterion, epoch):
+def validate(val_loader, model, criterion, epoch, device):
     """Perform validation on the validation set"""
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -229,7 +229,6 @@ def validate(val_loader, model, criterion, epoch):
     spec1 = AverageMeter()
     acc1 = AverageMeter()
 
-    device = torch.device("cpu")
 
     # switch to evaluate mode
     model.eval()
@@ -252,6 +251,7 @@ def validate(val_loader, model, criterion, epoch):
         sens = sensitivity(output.detach(), target)
         spec = specificity(output.detach(), target)
         acc = balanced_accuracy(output.detach(), target)
+        
         losses.update(loss.item(), input.size(0))
         top1.update(dice.item(), input.size(0))
         sens1.update(sens.item(), input.size(0))
