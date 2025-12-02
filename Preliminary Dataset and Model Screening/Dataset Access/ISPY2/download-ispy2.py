@@ -1,22 +1,22 @@
 """
-Download DUKE breast MRI dataset from TCIA using NBIA Data Retriever
+Download ISPY2 breast MRI dataset from TCIA using NBIA Data Retriever
 
-This script uses the NBIA Data Retriever CLI tool to download the DUKE dataset.
+This script uses the NBIA Data Retriever CLI tool to download the ISPY2 dataset.
 The NBIA tool must be installed.
 
 Requirements:
 - NBIA Data Retriever installed (download from TCIA website)
-- Collection name: "Duke-Breast-Cancer-MRI" (verify on TCIA website)
+- Collection name: "ISPY2" (verify on TCIA website)
 
 Note: As of July 2025, TCIA no longer requires account registration for most datasets.
 Credentials are optional - only needed for legacy controlled-access collections.
 
 Usage:
     # Without credentials (recommended for most datasets):
-    python duke-NBIA-streaming.py --output-dir /path/to/output
+    python download-ispy2.py --output-dir /path/to/output
     
     # With credentials (only if needed for specific collections):
-    python duke-NBIA-streaming.py --username YOUR_TCIA_USERNAME --password YOUR_PASSWORD --output-dir /path/to/output
+    python download-ispy2.py --username YOUR_TCIA_USERNAME --password YOUR_PASSWORD --output-dir /path/to/output
 """
 
 import subprocess
@@ -60,7 +60,7 @@ def download_collection(collection_name, output_dir, nbia_path=None, username=No
     Download a TCIA collection using NBIA Data Retriever
     
     Args:
-        collection_name: Name of the TCIA collection (e.g., "Duke-Breast-Cancer-MRI")
+        collection_name: Name of the TCIA collection (e.g., "ISPY2")
         output_dir: Output directory for downloaded data
         nbia_path: Path to NBIA Data Retriever executable (optional)
         username: TCIA username (optional, not required as of July 2025)
@@ -134,13 +134,13 @@ def download_collection(collection_name, output_dir, nbia_path=None, username=No
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Download DUKE breast MRI dataset from TCIA using NBIA Data Retriever'
+        description='Download ISPY2 breast MRI dataset from TCIA using NBIA Data Retriever'
     )
     parser.add_argument(
         '--collection',
         type=str,
-        default='Duke-Breast-Cancer-MRI',
-        help='TCIA collection name (default: Duke-Breast-Cancer-MRI)'
+        default='ISPY2',
+        help='TCIA collection name (default: ISPY2)'
     )
     parser.add_argument(
         '--username',
@@ -157,8 +157,8 @@ def main():
     parser.add_argument(
         '--output-dir',
         type=str,
-        default='./duke_downloaded',
-        help='Output directory for downloaded data (default: ./duke_downloaded)'
+        default='./ispy2_downloaded',
+        help='Output directory for downloaded data (default: ./ispy2_downloaded)'
     )
     parser.add_argument(
         '--nbia-path',
@@ -196,3 +196,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
