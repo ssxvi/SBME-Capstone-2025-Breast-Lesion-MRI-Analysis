@@ -46,13 +46,15 @@ Tensor board lets you check how the metrics (DCE, accuracy, sensitivity, specifi
 To see this in your terminal run:
 ```
 {
-  tensorboard --logdir=runs
+  tensorboard --logdir=.\runs
 }
 ``` 
 
 **Note:** Tensor board must be installed for this to work, should be running. Will only show after at least 1 epoch has been completed.
 
 ### 5. Optional changes
+
+#### Epochs
 
 You can change the number of epochs by changing the default val in this line:
 ```
@@ -62,6 +64,27 @@ You can change the number of epochs by changing the default val in this line:
 }
 ``` 
 
+**OR:**
+
+You can specifiy the number of epochs by specifying this argument when you run the script:
+```
+{
+  python ./train_modified.py --epochs 15
+}
+```
+
 5-10 is good for init testing. 
+
+#### Tensorboard
+
+You may not want to log every test, I've updated the code so tensorboard logging is optional.
+If you want to log in tensorboard, call the argument:
+```
+{
+  python ./train_modified.py --tensorboard
+}
+```
+
+If you don't call this, your run will **NOT** be logged.
 
 
