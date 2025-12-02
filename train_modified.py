@@ -57,6 +57,7 @@ parser.set_defaults(bottleneck=True)
 parser.set_defaults(augment=True)
 
 best_prec1 = 0
+writer = None
 
 def main():
     # print(">>> Starting script...")
@@ -64,8 +65,10 @@ def main():
     global args, best_prec1, writer
     args = parser.parse_args()
     log_dir=f'./runs/{args.name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+    
     #for logging to tensorboard
-    writer = SummaryWriter(log_dir=log_dir)
+    if args.tensorboard:
+        writer = SummaryWriter(log_dir=log_dir)
 
     # Data loading code
     
@@ -81,10 +84,10 @@ def main():
 
     train_dataset = split.SegDataset(img_dir=f"{output_dir}/train/images", mask_dir=f"{output_dir}/train/masks")
     val_dataset = split.SegDataset(img_dir=f"{output_dir}/val/images", mask_dir=f"{output_dir}/val/masks")
+    
     #takes a long time so creating checkpoint folder to store data
     checkpoints = os.makedirs(f"{output_dir}/checkpoints", exist_ok=True)
 
-    #End Joan Edit
     train_loader = torch.utils.data.DataLoader(train_dataset,batch_size=args.batch_size, shuffle=True, num_workers=4)
     val_loader = torch.utils.data.DataLoader(val_dataset,batch_size=args.batch_size, shuffle=False, num_workers=4)
 
@@ -213,12 +216,14 @@ def train(train_loader, model, criterion, optimizer, epoch, device):
                   'Dice {top1.val:.3f} ({top1.avg:.3f})'.format(
                       epoch, i, len(train_loader), batch_time=batch_time,
                       loss=losses, top1=top1))
-    # log to TensorBoard
-    writer.add_scalar('train/loss', losses.avg, epoch)
-    writer.add_scalar('train/dce', top1.avg, epoch)
-    writer.add_scalar('train/sensitivity', sens1.avg, epoch)
-    writer.add_scalar('train/specificity', spec1.avg, epoch)
-    writer.add_scalar('train/accuracy', acc1.avg, epoch)    
+    #optional logging
+    if writer is not None:
+        # log to TensorBoard
+        writer.add_scalar('train/loss', losses.avg, epoch)
+        writer.add_scalar('train/dce', top1.avg, epoch)
+        writer.add_scalar('train/sensitivity', sens1.avg, epoch)
+        writer.add_scalar('train/specificity', spec1.avg, epoch)
+        writer.add_scalar('train/accuracy', acc1.avg, epoch)    
 
 def validate(val_loader, model, criterion, epoch, device):
     """Perform validation on the validation set"""
@@ -275,12 +280,14 @@ def validate(val_loader, model, criterion, epoch, device):
           'Specificity {spec.avg:.3f}\t'
           'Accuracy {acc.avg:.3f}'.format(top1=top1, sens=sens1, spec=spec1, acc=acc1))
     
-    # log to TensorBoard
-    writer.add_scalar('val/loss', losses.avg, epoch)
-    writer.add_scalar('val/dce', top1.avg, epoch)
-    writer.add_scalar('val/sensitivity', sens1.avg, epoch)
-    writer.add_scalar('val/specificity', spec1.avg, epoch)
-    writer.add_scalar('val/accuracy', acc1.avg, epoch)
+    
+    if writer is not None:
+        # log to TensorBoard
+        writer.add_scalar('val/loss', losses.avg, epoch)
+        writer.add_scalar('val/dce', top1.avg, epoch)
+        writer.add_scalar('val/sensitivity', sens1.avg, epoch)
+        writer.add_scalar('val/specificity', spec1.avg, epoch)
+        writer.add_scalar('val/accuracy', acc1.avg, epoch)
     
     return top1.avg
 
