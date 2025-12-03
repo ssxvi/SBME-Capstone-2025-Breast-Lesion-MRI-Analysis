@@ -33,7 +33,11 @@ import SimpleITK as sitk
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-TCIA_API_BASE = "https://services.cancerimagingarchive.net/nbia-api/services/v3"
+TCIA_API_BASES = [
+    "https://services.cancerimagingarchive.net/nbia-api/services/v3",
+    "https://services.cancerimagingarchive.net/nbia-api/services/v2",
+    "https://services.cancerimagingarchive.net/nbia-api/services",
+]
 
 def create_session(total_retries: int = 5, backoff_factor: float = 0.8) -> requests.Session:
     session = requests.Session()
@@ -55,12 +59,21 @@ def create_session(total_retries: int = 5, backoff_factor: float = 0.8) -> reque
 SESSION = create_session()
 
 def tcia_get(path: str, headers: Dict[str, str], params: Optional[Dict] = None, stream: bool = False) -> requests.Response:
-    url = f"{TCIA_API_BASE}/{path}"
+    last_exc: Optional[Exception] = None
     merged_headers = dict(headers or {})
     merged_headers.setdefault("Accept", "application/json")
-    r = SESSION.get(url, headers=merged_headers, params=params, stream=stream, timeout=300)
-    r.raise_for_status()
-    return r
+    for base in TCIA_API_BASES:
+        url = f"{base}/{path}"
+        try:
+            r = SESSION.get(url, headers=merged_headers, params=params, stream=stream, timeout=300)
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            last_exc = e
+            continue
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("TCIA request failed with unknown error")
 
 
 def list_patients(headers: Dict[str, str], collection: str) -> List[Dict]:
@@ -203,6 +216,7 @@ def main():
     parser.add_argument("--test-frac", type=float, default=0.1, help="Test fraction.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for splits.")
     parser.add_argument("--only-list", action="store_true", help="Only list patients and exit.")
+    parser.add_argument("--patients-list", default=None, help="Path to a text file with PatientIDs to use (bypass API).")
     parser.add_argument("--skip-download", action="store_true", help="Skip DICOM downloads (assume present).")
     parser.add_argument("--skip-convert", action="store_true", help="Skip DICOM->NIfTI conversion (assume present).")
     parser.add_argument("--skip-stv", action="store_true", help="Skip STV label integration.")
@@ -218,9 +232,13 @@ def main():
     for p in (dicom_root, nifti_root, labels_root, logs_root):
         p.mkdir(parents=True, exist_ok=True)
 
-    print(f"[INFO] Listing patients in collection '{args.collection}'...")
-    patients = list_patients(headers, args.collection)
-    patient_ids = [p["patientId"] for p in patients]
+    if args.patients_list and Path(args.patients_list).exists():
+        print(f"[INFO] Loading patients from file: {args.patients_list}")
+        patient_ids = [ln.strip() for ln in Path(args.patients_list).read_text(encoding="utf-8").splitlines() if ln.strip()]
+    else:
+        print(f"[INFO] Listing patients in collection '{args.collection}'...")
+        patients = list_patients(headers, args.collection)
+        patient_ids = [p["patientId"] for p in patients]
     patient_ids.sort()
     print(f"[INFO] Found {len(patient_ids)} patients.")
 
