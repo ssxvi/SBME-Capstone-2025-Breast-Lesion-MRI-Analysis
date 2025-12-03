@@ -28,6 +28,7 @@ import nibabel as nib
 import numpy as np
 import SimpleITK as sitk
 import zipfile
+import inspect
 from tcia_utils import nbia as tcia_nb  # type: ignore
 
 def run_dcm2niix(dicom_dir: Path, out_dir: Path) -> None:
@@ -273,6 +274,36 @@ def main():
             return results
         raise RuntimeError(f"Unsupported object type for series listing: {type(obj)}")
 
+    def _maybe_unzip_any(sdir: Path) -> None:
+        for z in list(sdir.glob("*.zip")):
+            try:
+                with zipfile.ZipFile(z, "r") as zf:
+                    zf.extractall(sdir)
+                z.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    def _tcia_download_series(uid: str, sdir: Path) -> bool:
+        """
+        Use the current tcia_utils signature:
+          downloadSeries(series_data, number=0, path='...', input_type='list', ...)
+        where series_data is a list of SeriesInstanceUID strings.
+        """
+        func = getattr(tcia_nb, "downloadSeries", None)
+        if func is None:
+            raise RuntimeError("tcia_utils.nbia.downloadSeries not available")
+        sdir.mkdir(parents=True, exist_ok=True)
+        try:
+            # Preferred call per signature discovered in your env
+            func(series_data=[uid], input_type="list", path=str(sdir), as_zip=False)
+        except Exception:
+            # Fallback: try without as_zip
+            try:
+                func(series_data=[uid], input_type="list", path=str(sdir))
+            except Exception:
+                return False
+        _maybe_unzip_any(sdir)
+        return any(sdir.rglob("*.dcm"))
     if args.patients_list and Path(args.patients_list).exists():
         print(f"[INFO] Loading patients from file: {args.patients_list}")
         patient_ids = [ln.strip() for ln in Path(args.patients_list).read_text(encoding="utf-8").splitlines() if ln.strip()]
@@ -346,22 +377,9 @@ def main():
             for s in mr_series:
                 uid = s["seriesInstanceUid"]
                 sdir = patient_dicom_dir / uid
-                try:
-                    sdir.mkdir(parents=True, exist_ok=True)
-                    downloaded = False
-                    try:
-                        tcia_nb.downloadSeries(seriesInstanceUid=uid, path=str(sdir))
-                        downloaded = True
-                    except TypeError:
-                        try:
-                            tcia_nb.downloadSeries(uid, str(sdir))
-                            downloaded = True
-                        except Exception:
-                            pass
-                    if not downloaded:
-                        raise RuntimeError("tcia_utils.downloadSeries did not accept parameters used.")
-                except Exception as e:
-                    print(f"[WARN]  tcia_utils download failed for {uid}: {e}")
+                ok = _tcia_download_series(uid, sdir)
+                if not ok:
+                    print(f"[WARN]  tcia_utils download failed for {uid}: could not retrieve DICOM with available signatures")
 
         # Convert with dcm2niix
         if not args.skip_convert:
