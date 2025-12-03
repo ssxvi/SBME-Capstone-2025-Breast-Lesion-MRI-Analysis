@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
 Prepare ISPY1 MRI dataset for segmentation:
- - Uses TCIA NBIA v3 REST to list and download DICOM series from the ISPY1 collection
+ - Uses tcia_utils (NBIA) to list and download DICOM series from the ISPY1 collection
  - Converts DICOM to NIfTI with dcm2niix
  - Optionally integrates STV segmentation masks from a local analysis result (NIfTI) path
  - Reorients images and labels to RAS and aligns labels to a chosen reference image grid
  - Writes patient-level train/val/test splits; supports limiting number of patients for quick tests
 
 Notes:
- - TCIA NBIA v3 base: https://services.cancerimagingarchive.net/nbia-api/services/v3
- - Provide API key via --api-key or TCIA_API_KEY env
- - STV masks (NIfTI) are typically distributed via the ISPY1-Tumor-SEG-Radiomics analysis result
-   page; place them under a local directory and pass with --stv-root.
- - This script does NOT attempt to download analysis result NIfTIs (requires Aspera/GUI).
+ - Requires: pip install tcia_utils
+ - STV masks (NIfTI) are typically distributed via the ISPY1-Tumor-SEG-Radiomics analysis result.
+   Place them under a local directory and pass with --stv-root.
 """
 import argparse
 import os
@@ -26,97 +24,11 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import requests
 import nibabel as nib
 import numpy as np
 import SimpleITK as sitk
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-
-TCIA_API_BASES = [
-    "https://services.cancerimagingarchive.net/nbia-api/services/v3",
-    "https://services.cancerimagingarchive.net/nbia-api/services/v2",
-    "https://services.cancerimagingarchive.net/nbia-api/services",
-]
-
-def create_session(total_retries: int = 5, backoff_factor: float = 0.8) -> requests.Session:
-    session = requests.Session()
-    retry = Retry(
-        total=total_retries,
-        read=total_retries,
-        connect=total_retries,
-        status=total_retries,
-        backoff_factor=backoff_factor,
-        status_forcelist=[500, 502, 503, 504],
-        allowed_methods=["GET"],
-        raise_on_status=False,
-    )
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    return session
-
-SESSION = create_session()
-
-def tcia_get(path: str, headers: Dict[str, str], params: Optional[Dict] = None, stream: bool = False) -> requests.Response:
-    last_exc: Optional[Exception] = None
-    merged_headers = dict(headers or {})
-    merged_headers.setdefault("Accept", "application/json")
-    for base in TCIA_API_BASES:
-        url = f"{base}/{path}"
-        try:
-            r = SESSION.get(url, headers=merged_headers, params=params, stream=stream, timeout=300)
-            r.raise_for_status()
-            return r
-        except Exception as e:
-            last_exc = e
-            continue
-    if last_exc:
-        raise last_exc
-    raise RuntimeError("TCIA request failed with unknown error")
-
-
-def list_patients(headers: Dict[str, str], collection: str) -> List[Dict]:
-    params = {"Collection": collection}
-    try:
-        r = tcia_get("getPatient", headers, params=params)
-        return r.json()
-    except Exception:
-        # Fallback: derive patient list from series listing
-        try:
-            rs = tcia_get("getSeries", headers, params=params)
-            js = rs.json()
-            pids = set()
-            for s in js:
-                pid = s.get("patientId") or s.get("PatientID")
-                if pid:
-                    pids.add(pid)
-            return [{"patientId": pid} for pid in sorted(pids)]
-        except Exception as e:
-            raise e
-
-
-def list_series_for_patient(headers: Dict[str, str], collection: str, patient_id: str) -> List[Dict]:
-    params = {"Collection": collection, "PatientID": patient_id}
-    r = tcia_get("getSeries", headers, params=params)
-    return r.json()
-
-
-def download_series_zip(headers: Dict[str, str], series_uid: str, out_zip: Path) -> None:
-    out_zip.parent.mkdir(parents=True, exist_ok=True)
-    with tcia_get("getImage", headers, params={"SeriesInstanceUID": series_uid}, stream=True) as resp:
-        with open(out_zip, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    f.write(chunk)
-
-
-def unzip_series(zip_path: Path, out_dir: Path) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(out_dir)
-    zip_path.unlink(missing_ok=True)
-
+import zipfile
+from tcia_utils import nbia as tcia_nb  # type: ignore
 
 def run_dcm2niix(dicom_dir: Path, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -221,7 +133,6 @@ def write_splits(all_patients: List[str], out_dir: Path, val_frac: float, test_f
 
 def main():
     parser = argparse.ArgumentParser(description="Download and prepare ISPY1 MRI with STV labels for segmentation.")
-    parser.add_argument("--api-key", default=os.getenv("TCIA_API_KEY"), help="TCIA API key (optional for public datasets).")
     parser.add_argument("--collection", default="ISPY1", help="TCIA collection name.")
     parser.add_argument("--out-root", required=True, help="Output root directory.")
     parser.add_argument("--stv-root", default=None, help="Path to local STV NIfTI analysis result (optional).")
@@ -234,11 +145,14 @@ def main():
     parser.add_argument("--skip-download", action="store_true", help="Skip DICOM downloads (assume present).")
     parser.add_argument("--skip-convert", action="store_true", help="Skip DICOM->NIfTI conversion (assume present).")
     parser.add_argument("--skip-stv", action="store_true", help="Skip STV label integration.")
-    parser.add_argument("--use-tcia-utils", action="store_true", help="Use tcia_utils (NBIA) backend instead of raw REST.")
     args = parser.parse_args()
 
-    # API key is optional for public datasets; include header only if provided
-    headers = {"API-Key": args.api_key} if args.api_key else {}
+    # Require tcia_utils
+    try:
+        from tcia_utils import nbia as tcia_nb  # type: ignore
+    except Exception as e:
+        print(f"[ERROR] tcia_utils is required. Install with: pip install tcia_utils. Detail: {e}", file=sys.stderr)
+        sys.exit(1)
     out_root = Path(args.out_root)
     dicom_root = out_root / "raw_dicom"
     nifti_root = out_root / "nifti"
@@ -247,19 +161,17 @@ def main():
     for p in (dicom_root, nifti_root, labels_root, logs_root):
         p.mkdir(parents=True, exist_ok=True)
 
-    tcia_utils_mod = None
+    # Helpers to find columns in dataframes from tcia_utils
     def _df_find_col(df, preferred: Tuple[str, ...], fuzzy_contains: Tuple[str, ...] = ()) -> Optional[str]:
         try:
             cols = list(getattr(df, "columns", []))
         except Exception:
             return None
-        # exact, case-insensitive
         lower_map = {c.lower(): c for c in cols}
         for cand in preferred:
             c = lower_map.get(cand.lower())
             if c:
                 return c
-        # fuzzy contains (all tokens must appear)
         tokens = [t.lower() for t in fuzzy_contains]
         if tokens:
             for c in cols:
@@ -268,63 +180,51 @@ def main():
                     return c
         return None
 
-    if args.use_tcia_utils:
-        try:
-            from tcia_utils import nbia as tcia_utils_mod  # type: ignore
-        except Exception as e:
-            print(f"[ERROR] --use-tcia-utils specified but tcia_utils is not available: {e}", file=sys.stderr)
-            sys.exit(1)
-
     if args.patients_list and Path(args.patients_list).exists():
         print(f"[INFO] Loading patients from file: {args.patients_list}")
         patient_ids = [ln.strip() for ln in Path(args.patients_list).read_text(encoding="utf-8").splitlines() if ln.strip()]
     else:
         print(f"[INFO] Listing patients in collection '{args.collection}'...")
-        if tcia_utils_mod:
-            # Use tcia_utils to list series then derive patients
-            try:
-                # Prefer dedicated patient listing if available
-                dfp = None
+        try:
+            # Prefer dedicated patient listing if available
+            dfp = None
+            for kw in ({"collection": args.collection}, {"Collection": args.collection}):
+                try:
+                    dfp = tcia_nb.getPatient(**kw)
+                    break
+                except Exception:
+                    dfp = None
+            if dfp is not None:
+                pcol = _df_find_col(
+                    dfp,
+                    preferred=("PatientID", "patientId", "patientID", "patientid", "Patient Id"),
+                    fuzzy_contains=("patient", "id"),
+                )
+                if not pcol:
+                    raise RuntimeError("Could not find PatientID column in tcia_utils.getPatient result.")
+                patient_ids = sorted(set(dfp[pcol].astype(str).tolist()))
+            else:
+                # Fallback to series listing and derive unique patients
+                dfs = None
                 for kw in ({"collection": args.collection}, {"Collection": args.collection}):
                     try:
-                        dfp = tcia_utils_mod.getPatient(**kw)
+                        dfs = tcia_nb.getSeries(**kw)
                         break
                     except Exception:
-                        dfp = None
-                if dfp is not None:
-                    pcol = _df_find_col(
-                        dfp,
-                        preferred=("PatientID", "patientId", "patientID", "patientid", "Patient Id"),
-                        fuzzy_contains=("patient", "id"),
-                    )
-                    if not pcol:
-                        raise RuntimeError("Could not find PatientID column in tcia_utils.getPatient result.")
-                    patient_ids = sorted(set(dfp[pcol].astype(str).tolist()))
-                else:
-                    # Fallback to series listing and derive unique patients
-                    dfs = None
-                    for kw in ({"collection": args.collection}, {"Collection": args.collection}):
-                        try:
-                            dfs = tcia_utils_mod.getSeries(**kw)
-                            break
-                        except Exception:
-                            dfs = None
-                    if dfs is None:
-                        raise RuntimeError("tcia_utils.getSeries failed for collection listing.")
-                    pcol = _df_find_col(
-                        dfs,
-                        preferred=("PatientID", "patientId", "patientID", "patientid", "Patient Id"),
-                        fuzzy_contains=("patient", "id"),
-                    )
-                    if not pcol:
-                        raise RuntimeError("Could not find PatientID column in tcia_utils.getSeries result.")
-                    patient_ids = sorted(set(dfs[pcol].astype(str).tolist()))
-            except Exception as e:
-                print(f"[ERROR] tcia_utils failed to list patients: {e}", file=sys.stderr)
-                sys.exit(1)
-        else:
-            patients = list_patients(headers, args.collection)
-            patient_ids = [p["patientId"] for p in patients]
+                        dfs = None
+                if dfs is None:
+                    raise RuntimeError("tcia_utils.getSeries failed for collection listing.")
+                pcol = _df_find_col(
+                    dfs,
+                    preferred=("PatientID", "patientId", "patientID", "patientid", "Patient Id"),
+                    fuzzy_contains=("patient", "id"),
+                )
+                if not pcol:
+                    raise RuntimeError("Could not find PatientID column in tcia_utils.getSeries result.")
+                patient_ids = sorted(set(dfs[pcol].astype(str).tolist()))
+        except Exception as e:
+            print(f"[ERROR] tcia_utils failed to list patients: {e}", file=sys.stderr)
+            sys.exit(1)
     patient_ids.sort()
     print(f"[INFO] Found {len(patient_ids)} patients.")
 
@@ -348,91 +248,69 @@ def main():
         patient_nifti_dir.mkdir(parents=True, exist_ok=True)
         patient_label_dir.mkdir(parents=True, exist_ok=True)
 
-        # Enumerate MR series
-        if tcia_utils_mod:
-            try:
-                df = None
-                # Try parameter names for patient filter
-                for kw in (
-                    {"collection": args.collection, "PatientID": pid},
-                    {"collection": args.collection, "patientId": pid},
-                    {"Collection": args.collection, "PatientID": pid},
-                ):
-                    try:
-                        df = tcia_utils_mod.getSeries(**kw)
-                        break
-                    except TypeError:
-                        continue
-                if df is None:
-                    raise RuntimeError("tcia_utils.getSeries failed for patient.")
-                # Filter MR modality
-                mod_col = _df_find_col(df, preferred=("Modality", "modality"))
-                if mod_col:
-                    df = df[df[mod_col].astype(str).str.upper() == "MR"]
-                # Normalize series UID column
-                uid_col = _df_find_col(
-                    df,
-                    preferred=("SeriesInstanceUID", "seriesInstanceUid", "seriesInstanceUID", "seriesinstanceuid"),
-                    fuzzy_contains=("series", "uid"),
-                )
-                if uid_col is None:
-                    raise RuntimeError("SeriesInstanceUID column not found in tcia_utils.getSeries output.")
-                # Also capture description for sequence naming
-                desc_col = _df_find_col(df, preferred=("SeriesDescription", "seriesDescription", "seriesdescription"),
-                                        fuzzy_contains=("description",))
-                mr_series = []
-                for _, row in df.iterrows():
-                    entry = {
-                        "seriesInstanceUid": str(row[uid_col]),
-                        "seriesDescription": str(row[desc_col]) if desc_col else None,
-                        "modality": "MR",
-                    }
-                    mr_series.append(entry)
-            except Exception as e:
-                print(f"[WARN] tcia_utils listing failed for {pid}: {e}")
-                mr_series = []
-        else:
-            series_list = list_series_for_patient(headers, args.collection, pid)
-            mr_series = [s for s in series_list if s.get("modality") == "MR"]
+        # Enumerate MR series via tcia_utils
+        try:
+            df = None
+            for kw in (
+                {"collection": args.collection, "PatientID": pid},
+                {"collection": args.collection, "patientId": pid},
+                {"Collection": args.collection, "PatientID": pid},
+            ):
+                try:
+                    df = tcia_nb.getSeries(**kw)
+                    break
+                except TypeError:
+                    continue
+            if df is None:
+                raise RuntimeError("tcia_utils.getSeries failed for patient.")
+            mod_col = _df_find_col(df, preferred=("Modality", "modality"))
+            if mod_col:
+                df = df[df[mod_col].astype(str).str.upper() == "MR"]
+            uid_col = _df_find_col(
+                df,
+                preferred=("SeriesInstanceUID", "seriesInstanceUid", "seriesInstanceUID", "seriesinstanceuid"),
+                fuzzy_contains=("series", "uid"),
+            )
+            if uid_col is None:
+                raise RuntimeError("SeriesInstanceUID column not found.")
+            desc_col = _df_find_col(df, preferred=("SeriesDescription", "seriesDescription", "seriesdescription"),
+                                    fuzzy_contains=("description",))
+            mr_series = []
+            for _, row in df.iterrows():
+                entry = {
+                    "seriesInstanceUid": str(row[uid_col]),
+                    "seriesDescription": str(row[desc_col]) if desc_col else None,
+                    "modality": "MR",
+                }
+                mr_series.append(entry)
+        except Exception as e:
+            print(f"[WARN] tcia_utils listing failed for {pid}: {e}")
+            mr_series = []
         if not mr_series:
             print(f"[WARN] No MR series for {pid}, skipping.")
             continue
 
-        # Download each series as DICOM zip, then unzip
+        # Download each series using tcia_utils
         if not args.skip_download:
             for s in mr_series:
                 uid = s["seriesInstanceUid"]
                 sdir = patient_dicom_dir / uid
-                if tcia_utils_mod:
+                try:
+                    sdir.mkdir(parents=True, exist_ok=True)
+                    downloaded = False
                     try:
-                        sdir.mkdir(parents=True, exist_ok=True)
-                        # Try common signatures for downloadSeries
-                        downloaded = False
+                        tcia_nb.downloadSeries(seriesInstanceUid=uid, path=str(sdir))
+                        downloaded = True
+                    except TypeError:
                         try:
-                            tcia_utils_mod.downloadSeries(seriesInstanceUid=uid, path=str(sdir))
+                            tcia_nb.downloadSeries(uid, str(sdir))
                             downloaded = True
-                        except TypeError:
-                            try:
-                                tcia_utils_mod.downloadSeries(uid, str(sdir))
-                                downloaded = True
-                            except Exception:
-                                pass
-                        if not downloaded:
-                            raise RuntimeError("tcia_utils.downloadSeries did not accept parameters used.")
-                    except Exception as e:
-                        print(f"[WARN]  tcia_utils download failed for {uid}: {e}")
-                else:
-                    zpath = sdir / "series.zip"
-                    if (sdir.exists() and any(sdir.glob("*.dcm"))) or zpath.exists():
-                        pass
-                    else:
-                        try:
-                            print(f"[INFO]  Downloading series {uid} ...")
-                            download_series_zip(headers, uid, zpath)
-                            print(f"[INFO]  Unzipping series {uid} ...")
-                            unzip_series(zpath, sdir)
-                        except Exception as e:
-                            print(f"[WARN]  Failed to download/unzip series {uid}: {e}")
+                        except Exception:
+                            pass
+                    if not downloaded:
+                        raise RuntimeError("tcia_utils.downloadSeries did not accept parameters used.")
+                except Exception as e:
+                    print(f"[WARN]  tcia_utils download failed for {uid}: {e}")
 
         # Convert with dcm2niix
         if not args.skip_convert:

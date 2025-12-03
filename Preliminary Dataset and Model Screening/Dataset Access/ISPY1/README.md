@@ -1,8 +1,8 @@
-ISPY1 preparation (TCIA REST) for segmentation
+ISPY1 preparation (tcia_utils/NBIA) for segmentation
 ================================================
 
 This directory contains a script to:
-- list and download ISPY1 DICOM via TCIA REST,
+- list and download ISPY1 DICOM via tcia_utils (NBIA),
 - convert to NIfTI (`dcm2niix`),
 - optionally merge STV segmentation masks (NIfTI) from the ISPY1-Tumor-SEG-Radiomics analysis result,
 - reorient to RAS and align labels to a chosen reference image grid,
@@ -13,18 +13,19 @@ References
 - ISPY1-Tumor-SEG-Radiomics (NIfTI STV labels, ~6.1 GB): `https://www.cancerimagingarchive.net/analysis-result/ispy1-tumor-seg-radiomics/`
 
 Prerequisites
-- TCIA API Key is optional for public datasets (you can omit it).
 - `dcm2niix` available on PATH (module or conda).
-- Python packages: `requests`, `nibabel`, `SimpleITK`.
+- Python packages: `nibabel`, `SimpleITK`, `tcia_utils`.
 
 Environment suggestion (Sockeye)
 ```bash
-mamba create -n ispy1 python=3.10 requests nibabel SimpleITK -c conda-forge -y
+mamba create -n ispy1 python=3.10 nibabel SimpleITK -c conda-forge -y
+mamba activate ispy1
+pip install tcia_utils
 # dcm2niix via conda if module not available:
 mamba install -n ispy1 -c conda-forge dcm2niix -y
 ```
 
-One-time (login/DTN) – Download and prepare (limit to N patients)
+One-time (login/DTN) – Download and prepare with tcia_utils (limit to N patients)
 ```bash
 OUT=/project/rrg-<pi>/<user>/ispy1
 STV=/project/rrg-<pi>/<user>/ispy1_seg_nifti   # unpack of analysis result; optional
