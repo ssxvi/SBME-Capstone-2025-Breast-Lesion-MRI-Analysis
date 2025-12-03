@@ -162,6 +162,13 @@ def main():
         p.mkdir(parents=True, exist_ok=True)
 
     # Helpers to find columns in dataframes from tcia_utils
+    def _is_dataframe(obj) -> bool:
+        try:
+            import pandas as _pd  # local import to avoid hard dep
+            return isinstance(obj, _pd.DataFrame)
+        except Exception:
+            return False
+
     def _df_find_col(df, preferred: Tuple[str, ...], fuzzy_contains: Tuple[str, ...] = ()) -> Optional[str]:
         try:
             cols = list(getattr(df, "columns", []))
@@ -180,6 +187,92 @@ def main():
                     return c
         return None
 
+    def _extract_patient_ids(obj) -> List[str]:
+        """
+        Accepts either a pandas DataFrame or a list of dicts and returns sorted PatientIDs.
+        """
+        # DataFrame
+        if _is_dataframe(obj):
+            pcol = _df_find_col(
+                obj,
+                preferred=("PatientID", "patientId", "patientID", "patientid", "Patient Id"),
+                fuzzy_contains=("patient", "id"),
+            )
+            if not pcol:
+                raise RuntimeError("Could not find PatientID column in tcia_utils result.")
+            return sorted(set(obj[pcol].astype(str).tolist()))
+        # List of dicts
+        if isinstance(obj, list):
+            ids = set()
+            for row in obj:
+                if not isinstance(row, dict):
+                    continue
+                pid = (
+                    row.get("PatientID")
+                    or row.get("patientId")
+                    or row.get("patientID")
+                    or row.get("Patient Id")
+                    or row.get("SubjectID")
+                    or row.get("subjectId")
+                )
+                if pid:
+                    ids.add(str(pid))
+            if not ids:
+                raise RuntimeError("No PatientID keys found in tcia_utils list result.")
+            return sorted(ids)
+        raise RuntimeError(f"Unsupported object type for patient listing: {type(obj)}")
+
+    def _extract_series_list(obj) -> List[Dict[str, Optional[str]]]:
+        """
+        Accepts either a pandas DataFrame or a list of dicts and returns a normalized list of series dicts:
+        {seriesInstanceUid, seriesDescription, modality}
+        """
+        results: List[Dict[str, Optional[str]]] = []
+        if _is_dataframe(obj):
+            uid_col = _df_find_col(
+                obj,
+                preferred=("SeriesInstanceUID", "seriesInstanceUid", "seriesInstanceUID", "seriesinstanceuid"),
+                fuzzy_contains=("series", "uid"),
+            )
+            desc_col = _df_find_col(
+                obj, preferred=("SeriesDescription", "seriesDescription", "seriesdescription"), fuzzy_contains=("description",)
+            )
+            mod_col = _df_find_col(obj, preferred=("Modality", "modality"))
+            for _, row in obj.iterrows():
+                uid = str(row[uid_col]) if uid_col else None
+                if not uid:
+                    continue
+                entry = {
+                    "seriesInstanceUid": uid,
+                    "seriesDescription": str(row[desc_col]) if desc_col else None,
+                    "modality": (str(row[mod_col]) if mod_col else None) or None,
+                }
+                results.append(entry)
+            return results
+        if isinstance(obj, list):
+            for row in obj:
+                if not isinstance(row, dict):
+                    continue
+                uid = (
+                    row.get("SeriesInstanceUID")
+                    or row.get("seriesInstanceUid")
+                    or row.get("seriesInstanceUID")
+                    or row.get("seriesinstanceuid")
+                )
+                if not uid:
+                    continue
+                desc = row.get("SeriesDescription") or row.get("seriesDescription") or row.get("seriesdescription")
+                mod = row.get("Modality") or row.get("modality")
+                results.append(
+                    {
+                        "seriesInstanceUid": str(uid),
+                        "seriesDescription": str(desc) if desc is not None else None,
+                        "modality": str(mod) if mod is not None else None,
+                    }
+                )
+            return results
+        raise RuntimeError(f"Unsupported object type for series listing: {type(obj)}")
+
     if args.patients_list and Path(args.patients_list).exists():
         print(f"[INFO] Loading patients from file: {args.patients_list}")
         patient_ids = [ln.strip() for ln in Path(args.patients_list).read_text(encoding="utf-8").splitlines() if ln.strip()]
@@ -195,14 +288,7 @@ def main():
                 except Exception:
                     dfp = None
             if dfp is not None:
-                pcol = _df_find_col(
-                    dfp,
-                    preferred=("PatientID", "patientId", "patientID", "patientid", "Patient Id"),
-                    fuzzy_contains=("patient", "id"),
-                )
-                if not pcol:
-                    raise RuntimeError("Could not find PatientID column in tcia_utils.getPatient result.")
-                patient_ids = sorted(set(dfp[pcol].astype(str).tolist()))
+                patient_ids = _extract_patient_ids(dfp)
             else:
                 # Fallback to series listing and derive unique patients
                 dfs = None
@@ -214,14 +300,17 @@ def main():
                         dfs = None
                 if dfs is None:
                     raise RuntimeError("tcia_utils.getSeries failed for collection listing.")
-                pcol = _df_find_col(
-                    dfs,
-                    preferred=("PatientID", "patientId", "patientID", "patientid", "Patient Id"),
-                    fuzzy_contains=("patient", "id"),
-                )
-                if not pcol:
-                    raise RuntimeError("Could not find PatientID column in tcia_utils.getSeries result.")
-                patient_ids = sorted(set(dfs[pcol].astype(str).tolist()))
+                # Extract patient IDs from the series listing object
+                series_norm = _extract_series_list(dfs)
+                # derive patient ids from original object if available; otherwise fall back to none
+                ids = set()
+                if _is_dataframe(dfs):
+                    ids = set(_extract_patient_ids(dfs))
+                elif isinstance(dfs, list):
+                    ids = set(_extract_patient_ids(dfs))
+                else:
+                    raise RuntimeError("Unsupported getSeries return type.")
+                patient_ids = sorted(ids)
         except Exception as e:
             print(f"[ERROR] tcia_utils failed to list patients: {e}", file=sys.stderr)
             sys.exit(1)
@@ -263,26 +352,9 @@ def main():
                     continue
             if df is None:
                 raise RuntimeError("tcia_utils.getSeries failed for patient.")
-            mod_col = _df_find_col(df, preferred=("Modality", "modality"))
-            if mod_col:
-                df = df[df[mod_col].astype(str).str.upper() == "MR"]
-            uid_col = _df_find_col(
-                df,
-                preferred=("SeriesInstanceUID", "seriesInstanceUid", "seriesInstanceUID", "seriesinstanceuid"),
-                fuzzy_contains=("series", "uid"),
-            )
-            if uid_col is None:
-                raise RuntimeError("SeriesInstanceUID column not found.")
-            desc_col = _df_find_col(df, preferred=("SeriesDescription", "seriesDescription", "seriesdescription"),
-                                    fuzzy_contains=("description",))
-            mr_series = []
-            for _, row in df.iterrows():
-                entry = {
-                    "seriesInstanceUid": str(row[uid_col]),
-                    "seriesDescription": str(row[desc_col]) if desc_col else None,
-                    "modality": "MR",
-                }
-                mr_series.append(entry)
+            series_norm = _extract_series_list(df)
+            # filter MR
+            mr_series = [s for s in series_norm if (s.get("modality") or "").upper() == "MR"]
         except Exception as e:
             print(f"[WARN] tcia_utils listing failed for {pid}: {e}")
             mr_series = []
