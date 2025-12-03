@@ -277,42 +277,21 @@ def main():
         print(f"[INFO] Loading patients from file: {args.patients_list}")
         patient_ids = [ln.strip() for ln in Path(args.patients_list).read_text(encoding="utf-8").splitlines() if ln.strip()]
     else:
-        print(f"[INFO] Listing patients in collection '{args.collection}'...")
+        print(f"[INFO] Listing patients in collection '{args.collection}' via getSeries...")
         try:
-            # Prefer dedicated patient listing if available
-            dfp = None
+            dfs = None
+            # Prefer lowercase parameter name
             for kw in ({"collection": args.collection}, {"Collection": args.collection}):
                 try:
-                    dfp = tcia_nb.getPatient(**kw)
+                    dfs = tcia_nb.getSeries(**kw)
                     break
                 except Exception:
-                    dfp = None
-            if dfp is not None:
-                patient_ids = _extract_patient_ids(dfp)
-            else:
-                # Fallback to series listing and derive unique patients
-                dfs = None
-                for kw in ({"collection": args.collection}, {"Collection": args.collection}):
-                    try:
-                        dfs = tcia_nb.getSeries(**kw)
-                        break
-                    except Exception:
-                        dfs = None
-                if dfs is None:
-                    raise RuntimeError("tcia_utils.getSeries failed for collection listing.")
-                # Extract patient IDs from the series listing object
-                series_norm = _extract_series_list(dfs)
-                # derive patient ids from original object if available; otherwise fall back to none
-                ids = set()
-                if _is_dataframe(dfs):
-                    ids = set(_extract_patient_ids(dfs))
-                elif isinstance(dfs, list):
-                    ids = set(_extract_patient_ids(dfs))
-                else:
-                    raise RuntimeError("Unsupported getSeries return type.")
-                patient_ids = sorted(ids)
+                    dfs = None
+            if dfs is None:
+                raise RuntimeError("tcia_utils.getSeries failed for collection listing.")
+            patient_ids = _extract_patient_ids(dfs)
         except Exception as e:
-            print(f"[ERROR] tcia_utils failed to list patients: {e}", file=sys.stderr)
+            print(f"[ERROR] tcia_utils failed to list patients from getSeries: {e}", file=sys.stderr)
             sys.exit(1)
     patient_ids.sort()
     print(f"[INFO] Found {len(patient_ids)} patients.")
