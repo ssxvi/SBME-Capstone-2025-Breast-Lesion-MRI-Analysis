@@ -248,6 +248,26 @@ def main():
         p.mkdir(parents=True, exist_ok=True)
 
     tcia_utils_mod = None
+    def _df_find_col(df, preferred: Tuple[str, ...], fuzzy_contains: Tuple[str, ...] = ()) -> Optional[str]:
+        try:
+            cols = list(getattr(df, "columns", []))
+        except Exception:
+            return None
+        # exact, case-insensitive
+        lower_map = {c.lower(): c for c in cols}
+        for cand in preferred:
+            c = lower_map.get(cand.lower())
+            if c:
+                return c
+        # fuzzy contains (all tokens must appear)
+        tokens = [t.lower() for t in fuzzy_contains]
+        if tokens:
+            for c in cols:
+                cl = c.lower()
+                if all(t in cl for t in tokens):
+                    return c
+        return None
+
     if args.use_tcia_utils:
         try:
             from tcia_utils import nbia as tcia_utils_mod  # type: ignore
@@ -263,26 +283,42 @@ def main():
         if tcia_utils_mod:
             # Use tcia_utils to list series then derive patients
             try:
-                # Try common argument names for getSeries
-                df = None
-                for kw in ({"collection": args.collection},):
+                # Prefer dedicated patient listing if available
+                dfp = None
+                for kw in ({"collection": args.collection}, {"Collection": args.collection}):
                     try:
-                        df = tcia_utils_mod.getSeries(**kw)
+                        dfp = tcia_utils_mod.getPatient(**kw)
                         break
-                    except TypeError:
-                        continue
-                if df is None:
-                    raise RuntimeError("tcia_utils.getSeries failed for collection listing.")
-                # Derive patient IDs from dataframe (handle varying column names)
-                cols = [c.lower() for c in getattr(df, "columns", [])]
-                patient_col = None
-                for cand in ("patientid", "patientId", "PatientID"):
-                    if cand.lower() in cols:
-                        patient_col = [c for c in df.columns if c.lower() == cand.lower()][0]
-                        break
-                if patient_col is None:
-                    raise RuntimeError("Could not find PatientID column in tcia_utils.getSeries result.")
-                patient_ids = sorted(set(df[patient_col].astype(str).tolist()))
+                    except Exception:
+                        dfp = None
+                if dfp is not None:
+                    pcol = _df_find_col(
+                        dfp,
+                        preferred=("PatientID", "patientId", "patientID", "patientid", "Patient Id"),
+                        fuzzy_contains=("patient", "id"),
+                    )
+                    if not pcol:
+                        raise RuntimeError("Could not find PatientID column in tcia_utils.getPatient result.")
+                    patient_ids = sorted(set(dfp[pcol].astype(str).tolist()))
+                else:
+                    # Fallback to series listing and derive unique patients
+                    dfs = None
+                    for kw in ({"collection": args.collection}, {"Collection": args.collection}):
+                        try:
+                            dfs = tcia_utils_mod.getSeries(**kw)
+                            break
+                        except Exception:
+                            dfs = None
+                    if dfs is None:
+                        raise RuntimeError("tcia_utils.getSeries failed for collection listing.")
+                    pcol = _df_find_col(
+                        dfs,
+                        preferred=("PatientID", "patientId", "patientID", "patientid", "Patient Id"),
+                        fuzzy_contains=("patient", "id"),
+                    )
+                    if not pcol:
+                        raise RuntimeError("Could not find PatientID column in tcia_utils.getSeries result.")
+                    patient_ids = sorted(set(dfs[pcol].astype(str).tolist()))
             except Exception as e:
                 print(f"[ERROR] tcia_utils failed to list patients: {e}", file=sys.stderr)
                 sys.exit(1)
@@ -317,8 +353,11 @@ def main():
             try:
                 df = None
                 # Try parameter names for patient filter
-                for kw in ({"collection": args.collection, "PatientID": pid},
-                           {"collection": args.collection, "patientId": pid}):
+                for kw in (
+                    {"collection": args.collection, "PatientID": pid},
+                    {"collection": args.collection, "patientId": pid},
+                    {"Collection": args.collection, "PatientID": pid},
+                ):
                     try:
                         df = tcia_utils_mod.getSeries(**kw)
                         break
@@ -327,27 +366,20 @@ def main():
                 if df is None:
                     raise RuntimeError("tcia_utils.getSeries failed for patient.")
                 # Filter MR modality
-                mod_col = None
-                for cand in ("modality", "Modality"):
-                    if cand in df.columns:
-                        mod_col = cand
-                        break
+                mod_col = _df_find_col(df, preferred=("Modality", "modality"))
                 if mod_col:
                     df = df[df[mod_col].astype(str).str.upper() == "MR"]
                 # Normalize series UID column
-                uid_col = None
-                for cand in ("seriesInstanceUid", "SeriesInstanceUID", "seriesInstanceUID", "seriesinstanceuid"):
-                    if cand in df.columns:
-                        uid_col = cand
-                        break
+                uid_col = _df_find_col(
+                    df,
+                    preferred=("SeriesInstanceUID", "seriesInstanceUid", "seriesInstanceUID", "seriesinstanceuid"),
+                    fuzzy_contains=("series", "uid"),
+                )
                 if uid_col is None:
                     raise RuntimeError("SeriesInstanceUID column not found in tcia_utils.getSeries output.")
                 # Also capture description for sequence naming
-                desc_col = None
-                for cand in ("seriesDescription", "SeriesDescription", "seriesdescription"):
-                    if cand in df.columns:
-                        desc_col = cand
-                        break
+                desc_col = _df_find_col(df, preferred=("SeriesDescription", "seriesDescription", "seriesdescription"),
+                                        fuzzy_contains=("description",))
                 mr_series = []
                 for _, row in df.iterrows():
                     entry = {
