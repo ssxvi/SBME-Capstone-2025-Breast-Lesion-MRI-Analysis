@@ -78,8 +78,22 @@ def tcia_get(path: str, headers: Dict[str, str], params: Optional[Dict] = None, 
 
 def list_patients(headers: Dict[str, str], collection: str) -> List[Dict]:
     params = {"Collection": collection}
-    r = tcia_get("getPatient", headers, params=params)
-    return r.json()
+    try:
+        r = tcia_get("getPatient", headers, params=params)
+        return r.json()
+    except Exception:
+        # Fallback: derive patient list from series listing
+        try:
+            rs = tcia_get("getSeries", headers, params=params)
+            js = rs.json()
+            pids = set()
+            for s in js:
+                pid = s.get("patientId") or s.get("PatientID")
+                if pid:
+                    pids.add(pid)
+            return [{"patientId": pid} for pid in sorted(pids)]
+        except Exception as e:
+            raise e
 
 
 def list_series_for_patient(headers: Dict[str, str], collection: str, patient_id: str) -> List[Dict]:
