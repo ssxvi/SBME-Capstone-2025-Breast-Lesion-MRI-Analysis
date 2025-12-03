@@ -1,15 +1,16 @@
-#To be addedfrom pathlib import Path
+from pathlib import Path
 from datasets import load_dataset
 import torchio as tio 
 import numpy as np 
 import pandas as pd
 from tqdm import tqdm
 
+# This is the default code given by Odelia, will modify to just download small amount of data for testing - T 
 
 # --------------------- Settings ---------------------
 repo_id = "ODELIA-AI/ODELIA-Challenge-2025"
 config = "unilateral"  # "default" or "unilateral"
-output_root = Path("./dataset_downloaded")
+output_root = Path("./Odelia/data")
 
 
 # Load dataset in streaming mode

@@ -18,7 +18,7 @@ max_samples = 10
 candidate_label_keys = [
     "Label", "label", "Target", "target",
     "Diagnosis", "diagnosis", "Pathology", "pathology",
-    "Malignancy", "malignancy", "Lesion_Type", "lesion_type"
+    "Malignancy", "malignancy", "Lesion", "lesion", "Lesion_Type", "lesion_type"
 ]
 
 
