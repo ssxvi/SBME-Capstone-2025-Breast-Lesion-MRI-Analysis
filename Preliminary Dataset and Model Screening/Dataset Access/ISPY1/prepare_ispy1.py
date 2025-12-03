@@ -30,13 +30,35 @@ import requests
 import nibabel as nib
 import numpy as np
 import SimpleITK as sitk
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 TCIA_API_BASE = "https://services.cancerimagingarchive.net/nbia-api/services/v3"
 
+def create_session(total_retries: int = 5, backoff_factor: float = 0.8) -> requests.Session:
+    session = requests.Session()
+    retry = Retry(
+        total=total_retries,
+        read=total_retries,
+        connect=total_retries,
+        status=total_retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET"],
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+SESSION = create_session()
 
 def tcia_get(path: str, headers: Dict[str, str], params: Optional[Dict] = None, stream: bool = False) -> requests.Response:
     url = f"{TCIA_API_BASE}/{path}"
-    r = requests.get(url, headers=headers, params=params, stream=stream, timeout=300)
+    merged_headers = dict(headers or {})
+    merged_headers.setdefault("Accept", "application/json")
+    r = SESSION.get(url, headers=merged_headers, params=params, stream=stream, timeout=300)
     r.raise_for_status()
     return r
 

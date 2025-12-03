@@ -13,8 +13,8 @@
 set -euo pipefail
 
 # Edit these paths
-OUT_ROOT=/arc/scratch/st-ilker-1/tkliu03/ispy1
-STV_ROOT=/arc/scratch/st-ilker-1/tkliu03/ispy1_seg_nifti   # optional; leave as-is if not available
+OUT_ROOT=/scratch/st-ilker-1/$USER/ispy1
+STV_ROOT=/scratch/st-ilker-1/$USER/ispy1_seg_nifti   # optional; leave as-is if not available
 MAX_PATIENTS=50   # limit total patients for quick pass; leave empty for all
 VAL_FRAC=0.1
 TEST_FRAC=0.1
