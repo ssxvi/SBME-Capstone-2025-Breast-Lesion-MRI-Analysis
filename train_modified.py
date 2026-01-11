@@ -53,6 +53,7 @@ parser.add_argument('--name', default='DenseNet_BC_100_12', type=str,
                     help='name of experiment')
 parser.add_argument('--tensorboard',
                     help='Log progress to TensorBoard', action='store_true')
+parser.add_argument('--sockeye', '-s', type=str, help='Save progress to specified sockeye directory')
 parser.set_defaults(bottleneck=True)
 parser.set_defaults(augment=True)
 
@@ -75,7 +76,12 @@ def main():
     kwargs = {'num_workers': 1, 'pin_memory': False}
     
     #separating images into images and masks folders
-    output_dir = "/Users/joannwokeforo/Documents/BMEG457/Data/ISPY1-TestFormat"
+    if args.sockeye:
+        output_dir = args.sockeye
+
+    else:
+        output_dir = "/Users/joannwokeforo/Documents/BMEG457/Data/ISPY1-TestFormat"
+    
     image_dir = f"{output_dir}/all_images"
     mask_dir = f"{output_dir}/all_masks"
     
