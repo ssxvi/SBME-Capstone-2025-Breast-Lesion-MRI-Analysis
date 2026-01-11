@@ -2,6 +2,7 @@ import os
 import shutil
 import random
 import torch
+from concurrent.futures import ThreadPoolExecutor
 from torch.utils.data import Dataset
 import nibabel as nib
 import torch.nn.functional as F
@@ -11,17 +12,14 @@ def split_data(img_directory, mask_directory, output_directory):
     """
         Splits images + masks into train/val/test folders.
     """
-    global img_dir
-    global mask_dir
-    global output_dir
     img_dir = img_directory
     mask_dir = mask_directory
     output_dir = output_directory
     splits = ["test", "val","train"]
 
     for s in splits:
-        os.makedirs(f"{output_dir}/{s}/images", exist_ok=True)
-        os.makedirs(f"{output_dir}/{s}/masks", exist_ok=True)
+        make_empty_dir(f"{output_dir}/{s}/images")
+        make_empty_dir(f"{output_dir}/{s}/masks")
 
     train_ratio = 0.70
     val_ratio = 0.15
@@ -58,21 +56,46 @@ def split_data(img_directory, mask_directory, output_directory):
     val_files = pairs[train_end:val_end]
     test_files = pairs[val_end:]
 
-    copy_split(train_files, "train")
-    copy_split(val_files, "val")
-    copy_split(test_files, "test")
+    copy_split(train_files, "train", img_dir, mask_dir, output_dir)
+    copy_split(val_files, "val", img_dir, mask_dir, output_dir)
+    copy_split(test_files, "test", img_dir, mask_dir, output_dir)
 
 
-def copy_split(pairs_list, split):
+def copy_split(pairs_list, split, img_dir, mask_dir, output_dir):
         """
         This function takes a paired list of images and masks, and splits them into training, validating, and testing datasets.
         Args:
             pairs_list (tuple): a tuple of the form [img, mask]
             split (string): name of dataset the input should be placed into
         """
-        for img, mask in pairs_list:
-            shutil.copy(os.path.join(img_dir,img), f"{output_dir}/{split}/images/{img}")
-            shutil.copy(os.path.join(mask_dir,mask), f"{output_dir}/{split}/masks/{mask}")
+        images = [x[0] for x in pairs_list]
+        masks = [y[1] for y in pairs_list]
+        split_directory = f"{output_dir}/{split}"
+
+        copy_files(images, img_dir, f"{split_directory}/images")
+        copy_files(masks, mask_dir, f"{split_directory}/masks")
+    
+
+def make_empty_dir(directory):
+    """
+    This function creates the desired directory. The newly made directory is ALWAYS empty.
+    
+    :param directory (string): Name of directory to be created.
+    """
+
+    if os.path.exists(directory):
+        shutil.rmtree(directory)
+        os.makedirs(directory)
+        return
+    
+    os.makedirs(directory)
+
+
+def copy_files(files, source, destination):
+    """Uses threads to improve copy speed"""
+    n_threads = min(len(files), os.cpu_count())
+    with ThreadPoolExecutor(n_threads) as executor:
+        _ = [executor.submit(shutil.copy, os.path.join(source, file), f"{destination}/{file}") for file in files]
 
 
 class SegDataset(Dataset):

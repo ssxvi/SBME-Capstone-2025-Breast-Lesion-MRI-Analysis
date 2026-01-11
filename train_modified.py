@@ -324,7 +324,8 @@ def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 after 150 and 225 epochs"""
     lr = args.lr * (0.1 ** (epoch // 150)) * (0.1 ** (epoch // 225))
     # log to TensorBoard
-    writer.add_scalar('learning_rate', lr, epoch)
+    if writer is not None:
+        writer.add_scalar('learning_rate', lr, epoch)
     
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
