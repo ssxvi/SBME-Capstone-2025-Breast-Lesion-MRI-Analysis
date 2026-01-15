@@ -1,7 +1,10 @@
 import argparse
 import os
+import sys
 import shutil
 import time
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import torch
 import torch.nn as nn
@@ -9,7 +12,7 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-# import torchvision.transforms as transforms
+# import torchvision.transforms as T
 # import torchvision.datasets as datasets
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
@@ -18,8 +21,6 @@ from datetime import datetime
 from model.tiramisu import FCDenseNet103 as dn
 import splitdata as split
 
-# used for logging to TensorBoard
-# create a writer object
 
 parser = argparse.ArgumentParser(description='PyTorch DenseNet Training')
 parser.add_argument('--epochs', default=60, type=int,
@@ -54,18 +55,20 @@ parser.add_argument('--name', default='DenseNet_BC_100_12', type=str,
 parser.add_argument('--tensorboard',
                     help='Log progress to TensorBoard', action='store_true')
 parser.add_argument('--sockeye', '-s', type=str, help='Save progress to specified sockeye directory')
+parser.add_argument('--job', type = str, help='SLURM job ID')
 parser.set_defaults(bottleneck=True)
 parser.set_defaults(augment=True)
 
 best_prec1 = 0
 writer = None
 
+
 def main():
-    # print(">>> Starting script...")
-    # print("Using device:", torch.device("cpu"))
+    print(">>> Starting script...")
+    print("Loss -> BCE")
     global args, best_prec1, writer
     args = parser.parse_args()
-    log_dir=f'./runs/{args.name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+    log_dir=f'./runs/{args.name}_{args.job}'
     
     #for logging to tensorboard
     if args.tensorboard:
@@ -75,13 +78,14 @@ def main():
     
     kwargs = {'num_workers': 1, 'pin_memory': False}
     
-    #separating images into images and masks folders
+    
     if args.sockeye:
         output_dir = args.sockeye
 
     else:
         output_dir = "/Users/joannwokeforo/Documents/BMEG457/Data/ISPY1-TestFormat"
     
+    #separating dataset into images and masks folders
     image_dir = f"{output_dir}/all_images"
     mask_dir = f"{output_dir}/all_masks"
     
@@ -90,12 +94,12 @@ def main():
 
     train_dataset = split.SegDataset(img_dir=f"{output_dir}/train/images", mask_dir=f"{output_dir}/train/masks")
     val_dataset = split.SegDataset(img_dir=f"{output_dir}/val/images", mask_dir=f"{output_dir}/val/masks")
-    
+
     #takes a long time so creating checkpoint folder to store data
     checkpoints = os.makedirs(f"{output_dir}/checkpoints", exist_ok=True)
 
-    train_loader = torch.utils.data.DataLoader(train_dataset,batch_size=args.batch_size, shuffle=True, num_workers=4)
-    val_loader = torch.utils.data.DataLoader(val_dataset,batch_size=args.batch_size, shuffle=False, num_workers=4)
+    train_loader = torch.utils.data.DataLoader(train_dataset,batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory = True)
+    val_loader = torch.utils.data.DataLoader(val_dataset,batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory = True)
 
     # create model
     model = dn(1)
@@ -104,7 +108,10 @@ def main():
     print('Number of model parameters: {}'.format(
         sum([p.data.nelement() for p in model.parameters()])))
   
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    if args.sockeye:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     
     model = model.to(device)
 
@@ -122,27 +129,21 @@ def main():
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    cudnn.benchmark = True
+    if device.type == "cuda":
+        cudnn.benchmark = True
 
     # define loss function (criterion) and pptimizer
-    criterion = combined_loss
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
-                                momentum=args.momentum,
-                                nesterov=True,
+    criterion = dice_loss
+    optimizer = torch.optim.Adam(model.parameters(), args.lr,
                                 weight_decay=args.weight_decay)
+    # optimizer = torch.optim.SGD(model.parameters(), args.lr,
+    #                             momentum=args.momentum,
+    #                             nesterov=True,
+    #                             weight_decay=args.weight_decay)
 
     
-    # print(">>> Starting training...")
-    # print("Train batches:", len(train_loader))
-    # print("Val batches:", len(val_loader))
-    # print("Model device:", next(model.parameters()).device)
+    print(">>> Entering epoch loop")
     for epoch in range(args.start_epoch, args.epochs):
-        # for i, (input, target) in enumerate(train_loader):
-        #     if i == 0:
-        #         print(f"Entered training loop. First batch shape: input={input.shape}, target={target.shape}")
-        #     if i % args.print_freq == 0:
-        #         print(f"[Epoch {epoch} | Batch {i}] Still running...")
-
 
         adjust_learning_rate(optimizer, epoch)
 
@@ -160,7 +161,6 @@ def main():
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
         }, is_best)
-        # print(f">>> Finished epoch {epoch}")
     print('Best accuracy: ', best_prec1)
     writer.close()
 
@@ -183,11 +183,6 @@ def train(train_loader, model, criterion, optimizer, epoch, device):
         input = input.to(device)
         input_var = input
         target_var = target
-
-        # if i == 0:
-        #   print("TRAIN BATCH DEBUG")
-        #   print("input shape:", input.shape)
-        #   print("target unique:", torch.unique(target))
 
         # compute output
         output = model(input_var)
@@ -252,11 +247,12 @@ def validate(val_loader, model, criterion, epoch, device):
         # compute output
         with torch.no_grad():
             output = model(input)
-            # print("input min/max:", input.min().item(), input.max().item())
-            # print("target min/max:", target.min().item(), target.max().item())
-            # print("output min/max:", output.min().item(), output.max().item())
             loss = criterion(output, target)
 
+        if i == 0 and epoch % 5 == 0:
+            step = epoch
+            log_img_tensorboard(writer, input, target, output, step)
+        
         # measure accuracy and record loss
         dice = dice_score(output.detach(),target)
         sens = sensitivity(output.detach(), target)
@@ -357,8 +353,9 @@ def sensitivity (output, target, smooth = 1e-6):
     target = target.float()
 
     true_positive = (pred_bin * target).sum()
+    false_negative = ((1 - pred_bin) * target).sum()
 
-    return (true_positive + smooth) / (target.sum() + smooth)
+    return (true_positive + smooth) / (true_positive + false_negative + smooth)
 
 def specificity (output, target, smooth = 1e-6):
     pred = torch.sigmoid(output)
@@ -376,28 +373,23 @@ def balanced_accuracy(output, target):
 
 def dice_score(output, target, smooth = 1e-6):
     """Computes the dice score for the model output and ground truth"""
-    # print("output min/max", output.min().item(), output.max().item())
     
     pred = torch.sigmoid(output)
-    
-    pred_bin = (pred > 0.5).float()
     target = target.float()
-
-    # print("pred min/max:", pred.min().item(), pred.max().item())
-    # print("pred_bin min/max:", pred_bin.min().item(), pred_bin.max().item())
-    # print("target min/max:", target.min().item(), target.max().item())
     
-    intersection = (pred_bin * target).sum() 
-    union = pred_bin.sum() + target.sum()
-    # print("Intersection:", intersection)
-    # print("Union", union)
+    intersection = (pred * target).sum(dim=(1, 2, 3)) 
+    union = pred.sum(dim=(1, 2, 3)) + target.sum(dim=(1, 2, 3))
 
-    dice = (2 * intersection + smooth) / (union + smooth)
-    return dice
+    dice = (2. * intersection + smooth) / (union + smooth)
+    return dice.mean()
 
 def dice_loss(pred, target, smooth = 1):
     """Computes the dice loss for the model prediction and ground truth"""
-    return 1 - dice_score(pred, target)
+    dce = dice_score(pred,target)
+    return 1 - dce
+
+def bce_loss(pred, target):
+    return nn.BCEWithLogitsLoss()(pred, target.float())
 
 def combined_loss(pred, target):
     if target.dim() == 3:
@@ -408,6 +400,20 @@ def combined_loss(pred, target):
     d_loss = dice_loss(pred, target.float())
 
     return 0.5 * bce + 0.5 * d_loss
+
+def log_img_tensorboard(writer, input, target, output, step, idx=0):
+    """
+    input:  [B, 1, H, W]
+    target: [B, 1, H, W]
+    output: [B, 1, H, W] (logits)
+    """
+    img = input[idx:idx+1]
+    gt  = target[idx:idx+1].float()
+    pred = (torch.sigmoid(output[idx:idx+1]) > 0.5).float()
+
+    grid = torch.cat([img, gt, pred], dim=0)
+
+    writer.add_images(tag= "val/sample", img_tensor=grid, global_step = step)
 
 
 if __name__ == '__main__':
