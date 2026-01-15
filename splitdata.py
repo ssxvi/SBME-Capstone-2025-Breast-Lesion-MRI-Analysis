@@ -6,15 +6,15 @@ from concurrent.futures import ThreadPoolExecutor
 from torch.utils.data import Dataset
 import nibabel as nib
 import torch.nn.functional as F
+# import torchvision.transforms as T
 import numpy as np
 
-def split_data(img_directory, mask_directory, output_directory):
+
+def split_data(img_dir: str, mask_dir: str, output_dir: str):
     """
         Splits images + masks into train/val/test folders.
     """
-    img_dir = img_directory
-    mask_dir = mask_directory
-    output_dir = output_directory
+    
     splits = ["test", "val","train"]
 
     for s in splits:
@@ -24,16 +24,10 @@ def split_data(img_directory, mask_directory, output_directory):
     train_ratio = 0.70
     val_ratio = 0.15
 
-    #matches patient id to mask file name
-    #mask_dict = {m.split("_")[1]:m for m in os.listdir(mask_dir) if not m.startswith(".")}
-
     pairs = []
 
     #verifies all images have a corresponding mask, and pairs img and mask
-    for img in os.listdir(img_dir):
-        if img.startswith('.'):  # skip hidden files
-            continue
-        
+    for img in listdir_nohidden(img_dir):
         patient_id = img.split("_")[1]
 
         mask_matches = [m for m in os.listdir(mask_dir) if patient_id in m]
@@ -61,7 +55,7 @@ def split_data(img_directory, mask_directory, output_directory):
     copy_split(test_files, "test", img_dir, mask_dir, output_dir)
 
 
-def copy_split(pairs_list, split, img_dir, mask_dir, output_dir):
+def copy_split(pairs_list: list[tuple], split: str, img_dir: str, mask_dir: str, output_dir: str):
         """
         This function takes a paired list of images and masks, and splits them into training, validating, and testing datasets.
         Args:
@@ -74,9 +68,10 @@ def copy_split(pairs_list, split, img_dir, mask_dir, output_dir):
 
         copy_files(images, img_dir, f"{split_directory}/images")
         copy_files(masks, mask_dir, f"{split_directory}/masks")
+
     
 
-def make_empty_dir(directory):
+def make_empty_dir(directory: str):
     """
     This function creates the desired directory. The newly made directory is ALWAYS empty.
     
@@ -91,11 +86,33 @@ def make_empty_dir(directory):
     os.makedirs(directory)
 
 
-def copy_files(files, source, destination):
+def copy_files(files: str, source: str, destination: str):
     """Uses threads to improve copy speed"""
     n_threads = min(len(files), os.cpu_count())
     with ThreadPoolExecutor(n_threads) as executor:
         _ = [executor.submit(shutil.copy, os.path.join(source, file), f"{destination}/{file}") for file in files]
+
+def listdir_nohidden(path: str):
+    for f in os.listdir(path):
+        if not f.startswith('.'):
+            yield f
+
+def map_imgs_to_masks(img_files, mask_files):
+    img_to_mask_file_map = {}
+
+    for f in img_files:
+        patient_id = f.split('_')[1] #adjust to match naming convention
+        mask_file = [m for m in mask_files if patient_id in m]
+        if not mask_file:
+            raise ValueError(f"No mask found for {f}")
+        img_to_mask_file_map[f] = mask_file[0]
+
+    return img_to_mask_file_map
+
+
+def min_max_normalization(slice):
+    return ((slice - slice.min()) / (slice.max() - slice.min() + 1e-6))
+
 
 
 class SegDataset(Dataset):
@@ -103,81 +120,67 @@ class SegDataset(Dataset):
     Loads image-mask pairs from selected folder
     """
 
-    def __init__(self, img_dir, mask_dir, transform=None):
-          self.img_dir = img_dir
-          self.mask_dir = mask_dir
-          self.transform = transform
-
+    def __init__(self, img_dir, mask_dir):
           #writing down all file names to know what data we have
-          self.images = sorted([f for f in os.listdir(img_dir) if not f.startswith('.')])
-          self.masks = sorted([f for f in os.listdir(mask_dir) if not f.startswith('.')])
+          self.img_files = sorted(listdir_nohidden(img_dir))
+          self.mask_files = sorted(listdir_nohidden(mask_dir))
 
-          self.index_map = []
+          #mapping image filenames -> maskfilenames
+          self.img_to_mask = map_imgs_to_masks(self.img_files, self.mask_files)
 
-          self.img_to_mask = {}
+          # storing all images as numpy arrays
+          #list of tuples (img_vol, mask_vol) such that img_vol corresponds to mask_vol
+          self.volumes = [
+              (nib.load(os.path.join(img_dir, f)).get_fdata(),
+               nib.load(os.path.join(mask_dir, self.img_to_mask[f])).get_fdata())
+               for f in self.img_files
+          ]
           
-          for img_file in self.images:
-            patient_id = img_file.split('_')[1] # adjust to your naming
-            # find matching mask
-            #mask_matches = [m for m in os.listdir(mask_dir) if patient_id in m]
-            matched_mask = next((m for m in self.masks if patient_id in m), None)
-            if matched_mask is None:
-                raise ValueError(f"No mask found for {img_file}")
-            self.img_to_mask[img_file] = matched_mask
+          margin = 5
+          self.index_map = []
+          #reducing volume to slices that have segmentation_mask
+          for vol_idx, (img_vol,mask_vol) in enumerate(self.volumes):
+            depth = min(img_vol.shape[2], mask_vol.shape[2])
+            fg_slices = [slice_idx for slice_idx in range(depth) if mask_vol[:,:,slice_idx].max() > 0]
 
-          for vol_idx, img_file in enumerate(self.images):
-               img_path = os.path.join(self.img_dir, img_file)
-               mask_file = self.img_to_mask[img_file]
-               mask_path = os.path.join(self.mask_dir, mask_file)
-               
-               vol_img = nib.load(img_path).get_fdata()
-               vol_mask = nib.load(mask_path).get_fdata()
-               depth = vol_img.shape[2]
-               
-               for slice_idx in range(depth):
-                    mask_slice = vol_mask[:, :, slice_idx]
-                    if mask_slice.max() > 0:  # only keep slices with foreground
-                        self.index_map.append((vol_idx, slice_idx))
-    
-    #gets number of images in dataset 
+            if len(fg_slices) == 0:
+                continue
+
+            min_slice = max(0, min(fg_slices) - margin)
+            max_slice = min(depth - 1, max(fg_slices) + margin)
+            self.index_map.extend([(vol_idx, slice_idx) for slice_idx in range(min_slice, max_slice + 1)])
+            # mask_data = mask_vol 
+            # self.index_map.extend([(vol_idx,slice_idx) for slice_idx in range(depth) if mask_data[:,:,slice_idx].max() > 0])
+          #temporarily training on one image only
+        #   self.volumes = self.volumes[:1]
+          
+    #gets number of slices in dataset 
     def __len__(self):
          return len(self.index_map)
     
     def __getitem__(self, idx):
          vol_idx, slice_idx = self.index_map[idx]
-         
-         img_file = self.images[vol_idx]
-         mask_file = self.img_to_mask[img_file] ##make them have same name, but just in different directory
+         img_slice = self.volumes[vol_idx][0][:,:,slice_idx]
+         mask_slice = self.volumes[vol_idx][1][:,:,slice_idx]
 
-         img_path = os.path.join(self.img_dir,img_file)
-         mask_path = os.path.join(self.mask_dir, mask_file)
-
-         #loading image and mask
-
-         img = nib.load(img_path).get_fdata()
-         mask = nib.load(mask_path).get_fdata()
-
-         img_slice = img[:,:, slice_idx]
-         mask_slice = mask[:,:,slice_idx]
-
+         #ensuring slices are 2D not 3D or other dimension
          mask_slice = np.squeeze(mask_slice)
-
          if mask_slice.ndim != 2:
             raise RuntimeError(f"Mask slice not 2D, got shape {mask_slice.shape}")
-        
-         #converting to torch tensor
-         img_slice = torch.tensor(img_slice).unsqueeze(0).float()
-         mask_slice = torch.tensor(mask_slice).float()
-
-         if self.transform:
-              img_slice = self.transform(img_slice)
-
-         #mim-max normalization image slice
-         img_slice = (img_slice - img_slice.min()) / (img_slice.max() - img_slice.min())
-         #fit max slice to correct size
-         mask_slice = F.interpolate(mask_slice.unsqueeze(0).unsqueeze(0).float(), 
-                           size=(256, 256), mode='nearest').squeeze(0).squeeze(0).long()
-        
          
+         #convert mask and img to torch tensor: 1 x H x W
+         img_slice = torch.tensor(img_slice, dtype=torch.float32).unsqueeze(0)
+         mask_slice = torch.tensor(mask_slice, dtype=torch.long).unsqueeze(0)
+
+         #resize images to 1 x 256 x 256
+         img_slice = F.interpolate(img_slice.unsqueeze(0), size=(256,256), mode = 'bilinear', align_corners=False).squeeze(0)
+         mask_slice = F.interpolate(mask_slice.unsqueeze(0).float(), size=(256,256), mode ='nearest').squeeze(0).long()
+        
+         img_slice = torch.clamp(img_slice, 0, 3000) / 3000.0
+
+         
+         #image pre_processing: mim-max normalization
+        #  img_slice = min_max_normalization(img_slice)
+
          return img_slice, mask_slice
 
