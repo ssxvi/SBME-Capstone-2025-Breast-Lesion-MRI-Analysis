@@ -65,7 +65,6 @@ writer = None
 
 def main():
     print(">>> Starting script...")
-    print("Loss -> BCE")
     global args, best_prec1, writer
     args = parser.parse_args()
     log_dir=f'./runs/{args.name}_{args.job}'
@@ -133,7 +132,9 @@ def main():
         cudnn.benchmark = True
 
     # define loss function (criterion) and pptimizer
-    criterion = dice_loss
+    print("Loss -> 0.3BCE, 0.7DICE")
+    # criterion = dice_loss
+    criterion = combined_loss
     optimizer = torch.optim.Adam(model.parameters(), args.lr,
                                 weight_decay=args.weight_decay)
     # optimizer = torch.optim.SGD(model.parameters(), args.lr,
@@ -186,7 +187,7 @@ def train(train_loader, model, criterion, optimizer, epoch, device):
 
         # compute output
         output = model(input_var)
-        loss = criterion(output, target_var)
+        loss = criterion(output, target_var, 0.3, 0.7)
 
         # measure dice, and record loss
         #prec1 = accuracy(output.data, target, topk=(1,))[0]
@@ -247,11 +248,15 @@ def validate(val_loader, model, criterion, epoch, device):
         # compute output
         with torch.no_grad():
             output = model(input)
-            loss = criterion(output, target)
+            loss = criterion(output, target, 0.3, 0.7)
 
         if i == 0 and epoch % 5 == 0:
             step = epoch
-            log_img_tensorboard(writer, input, target, output, step)
+            fg_idxs = (target.sum(dim=(1,2,3)) > 0).nonzero(as_tuple=True)[0]
+            if len(fg_idxs) > 0:
+                log_img_tensorboard(writer, input, target, output, step, idx=fg_idxs[0].item())
+
+
         
         # measure accuracy and record loss
         dice = dice_score(output.detach(),target)
@@ -391,7 +396,7 @@ def dice_loss(pred, target, smooth = 1):
 def bce_loss(pred, target):
     return nn.BCEWithLogitsLoss()(pred, target.float())
 
-def combined_loss(pred, target):
+def combined_loss(pred, target, bce_weight=0.5, dce_weight=0.5):
     if target.dim() == 3:
         target = target.unsqueeze(1)
     target = target.float()
@@ -399,7 +404,7 @@ def combined_loss(pred, target):
     bce = nn.BCEWithLogitsLoss()(pred, target.float())
     d_loss = dice_loss(pred, target.float())
 
-    return 0.5 * bce + 0.5 * d_loss
+    return bce_weight * bce + dce_weight * d_loss
 
 def log_img_tensorboard(writer, input, target, output, step, idx=0):
     """
