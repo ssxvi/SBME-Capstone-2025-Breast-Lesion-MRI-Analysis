@@ -176,7 +176,10 @@ class SegDataset(Dataset):
          img_slice = F.interpolate(img_slice.unsqueeze(0), size=(256,256), mode = 'bilinear', align_corners=False).squeeze(0)
          mask_slice = F.interpolate(mask_slice.unsqueeze(0).float(), size=(256,256), mode ='nearest').squeeze(0).long()
         
-         img_slice = torch.clamp(img_slice, 0, 3000) / 3000.0
+         p1 = torch.quantile(img_slice, 0.01)
+         p99 = torch.quantile(img_slice, 0.99)
+         img_slice = torch.clamp(img_slice, p1, p99)
+         img_slice = (img_slice - p1) / (p99 - p1 + 1e-6)
 
          
          #image pre_processing: mim-max normalization
