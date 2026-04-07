@@ -1,0 +1,13 @@
+{
+  "channel_names": {
+    "0": "pre",
+    "1": "post1",
+    "2": "post2"
+  },
+  "labels": {
+    "background": 0
+  },
+  "numTraining": 0,
+  "file_ending": ".nii.gz",
+  "regions_class_order": []
+}

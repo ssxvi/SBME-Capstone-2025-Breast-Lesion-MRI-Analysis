@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breast MRI Analysis Report — MRI-2026-00847</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --bg-secondary: #f5f5f3;
+    --bg-tertiary: #eeede9;
+    --text-primary: #1a1a18;
+    --text-secondary: #6b6b67;
+    --border: rgba(0,0,0,0.12);
+    --border-med: rgba(0,0,0,0.2);
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+  }
+
+  @media print {
+    body { background: #fff !important; }
+    .no-print { display: none !important; }
+    .page { box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; }
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: #e8e7e3;
+    min-height: 100vh;
+    padding: 2rem;
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    background: var(--bg);
+    max-width: 860px;
+    margin: 0 auto;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 32px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
+    padding: 2.5rem 2.75rem;
+  }
+
+  /* ── Header ── */
+  .rpt-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 1.25rem;
+    border-bottom: 0.5px solid var(--border);
+    margin-bottom: 1.75rem;
+  }
+  .rpt-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  .rpt-title {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 3px;
+  }
+  .rpt-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .badge-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 3px 9px;
+    border-radius: 3px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    display: inline-block;
+  }
+  .badge-red   { background: #FCEBEB; color: #A32D2D; }
+  .badge-amber { background: #FAEEDA; color: #854F0B; }
+  .badge-blue  { background: #E6F1FB; color: #185FA5; }
+  .badge-green { background: #EAF3DE; color: #3B6D11; }
+
+  /* ── Section label ── */
+  .section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 0.7rem;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--bg);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.1rem 1.25rem;
+  }
+  .metric-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: 0.8rem 1rem;
+  }
+  .metric-val {
+    font-size: 22px;
+    font-weight: 500;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+  .metric-val-sm {
+    font-size: 17px;
+    font-weight: 500;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+  .metric-lbl {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+  }
+
+  /* ── Grids ── */
+  .two-col   { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .four-col  { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 1.25rem; }
+
+  /* ── Gauge card internals ── */
+  .gauge-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .gauge-card-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+  .gauge-center { display: flex; flex-direction: column; align-items: center; }
+
+  /* ── Bar rows ── */
+  .divider { height: 0.5px; background: var(--border); margin: 0.9rem 0; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+  .bar-name { font-size: 12px; color: var(--text-secondary); width: 90px; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 3px; }
+  .bar-pct   { font-size: 12px; font-family: var(--font-mono); color: var(--text-primary); width: 36px; text-align: right; }
+
+  /* ── Mask section ── */
+  .mask-canvas { width: 100%; border-radius: var(--radius-md); display: block; image-rendering: pixelated; }
+  .mask-col-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; }
+  .legend-row { display: flex; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
+  .legend-swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+  .mask-metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; margin-top: 10px; }
+
+  /* ── Model note ── */
+  .model-note {
+    background: var(--bg-secondary);
+    border-left: 2px solid var(--border-med);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    padding: 0.6rem 0.9rem;
+    margin-bottom: 1rem;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* ── Findings ── */
+  .finding-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+  .finding-row:last-child { margin-bottom: 0; }
+  .finding-icon {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .icon-warn { background: #FCEBEB; }
+  .icon-ok   { background: #EAF3DE; }
+  .finding-title { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
+  .finding-desc  { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+  /* ── Slice chart ── */
+  .chart-wrap { position: relative; height: 140px; }
+
+  /* ── Footer ── */
+  .rpt-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1.1rem;
+    border-top: 0.5px solid var(--border);
+    margin-top: 1.25rem;
+  }
+  .footer-txt { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); }
+
+  /* ── Print button ── */
+  .print-btn {
+    display: block;
+    margin: 1.5rem auto 0;
+    padding: 8px 22px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: var(--bg);
+    border: 0.5px solid var(--border-med);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .print-btn:hover { background: var(--bg-secondary); }
+
+  mb-0  { margin-bottom: 0 !important; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- Header -->
+  <div class="rpt-header">
+    <div>
+      <div class="rpt-eyebrow">Breast MRI Analysis Report</div>
+      <div class="rpt-title">Patient ID: MRI-2026-00847</div>
+      <div class="rpt-sub">Accession #A9934 &nbsp;·&nbsp; April 1, 2026 &nbsp;·&nbsp; Right Breast, Upper Outer Quadrant</div>
+    </div>
+    <div class="badge-stack">
+      <span class="badge badge-red">Lesion Detected</span>
+      <span class="badge badge-amber">Malignant — High Confidence</span>
+    </div>
+  </div>
+
+  <!-- Detection confidence -->
+  <div class="section-label">Detection confidence</div>
+  <div class="two-col">
+
+    <div class="card">
+      <div class="gauge-card-header">
+        <span class="gauge-card-title">Lesion presence</span>
+        <span class="badge badge-red">Positive</span>
+      </div>
+      <div class="gauge-center">
+        <svg width="150" height="84" viewBox="0 0 150 84">
+          <path d="M 12 74 A 63 63 0 0 1 138 74" fill="none" stroke="#e8e7e3" stroke-width="11" stroke-linecap="round"/>
+          <path d="M 12 74 A 63 63 0 0 1 138 74" fill="none" stroke="#E24B4A" stroke-width="11" stroke-linecap="round"
+            stroke-dasharray="197.9" stroke-dashoffset="19.79"/>
+          <text x="75" y="68" text-anchor="middle" font-size="21" font-weight="500" font-family="IBM Plex Mono, monospace" fill="#1a1a18">90%</text>
+          <text x="75" y="80" text-anchor="middle" font-size="10" fill="#6b6b67">confidence</text>
+        </svg>
+      </div>
+      <div class="divider"></div>
+      <div class="bar-row">
+        <span class="bar-name">Lesion</span>
+        <div class="bar-track"><div class="bar-fill" style="width:90%;background:#E24B4A;"></div></div>
+        <span class="bar-pct">90%</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-name">No lesion</span>
+        <div class="bar-track"><div class="bar-fill" style="width:10%;background:#b4b2a9;"></div></div>
+        <span class="bar-pct">10%</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="gauge-card-header">
+        <span class="gauge-card-title">Malignancy classification</span>
+        <span class="badge badge-amber">Malignant</span>
+      </div>
+      <div class="gauge-center">
+        <svg width="150" height="84" viewBox="0 0 150 84">
+          <path d="M 12 74 A 63 63 0 0 1 138 74" fill="none" stroke="#e8e7e3" stroke-width="11" stroke-linecap="round"/>
+          <path d="M 12 74 A 63 63 0 0 1 138 74" fill="none" stroke="#BA7517" stroke-width="11" stroke-linecap="round"
+            stroke-dasharray="197.9" stroke-dashoffset="39.58"/>
+          <text x="75" y="68" text-anchor="middle" font-size="21" font-weight="500" font-family="IBM Plex Mono, monospace" fill="#1a1a18">80%</text>
+          <text x="75" y="80" text-anchor="middle" font-size="10" fill="#6b6b67">confidence</text>
+        </svg>
+      </div>
+      <div class="divider"></div>
+      <div class="bar-row">
+        <span class="bar-name">Malignant</span>
+        <div class="bar-track"><div class="bar-fill" style="width:80%;background:#BA7517;"></div></div>
+        <span class="bar-pct">80%</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-name">Benign</span>
+        <div class="bar-track"><div class="bar-fill" style="width:20%;background:#378ADD;"></div></div>
+        <span class="bar-pct">20%</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Segmentation -->
+  <div class="section-label">Predicted segmentation</div>
+  <div class="card" style="margin-bottom:1.25rem;">
+    <div class="three-col">
+      <div>
+        <div class="mask-col-label">T1 — original</div>
+        <canvas id="c1" class="mask-canvas" width="140" height="140"></canvas>
+      </div>
+      <div>
+        <div class="mask-col-label">Predicted mask</div>
+        <canvas id="c2" class="mask-canvas" width="140" height="140"></canvas>
+      </div>
+      <div>
+        <div class="mask-col-label">Confidence overlay</div>
+        <canvas id="c3" class="mask-canvas" width="140" height="140"></canvas>
+      </div>
+    </div>
+    <div class="legend-row">
+      <span class="legend-item"><span class="legend-swatch" style="background:rgba(226,75,74,0.85);"></span>High confidence (&gt;0.75)</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:rgba(186,117,23,0.75);"></span>Moderate confidence (0.50–0.75)</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:rgba(55,138,221,0.55);"></span>Low confidence / boundary (&lt;0.50)</span>
+    </div>
+    <div class="mask-metrics">
+      <div class="metric-card"><div class="metric-val-sm">312 mm²</div><div class="metric-lbl">Predicted area</div></div>
+      <div class="metric-card"><div class="metric-val-sm">2.1 cm</div><div class="metric-lbl">Max diameter</div></div>
+      <div class="metric-card"><div class="metric-val-sm">0.91</div><div class="metric-lbl">Mean voxel confidence</div></div>
+    </div>
+  </div>
+
+  <!-- Slice chart -->
+  <div class="section-label">Confidence by slice</div>
+  <div class="card" style="margin-bottom:1.25rem;">
+    <div class="chart-wrap"><canvas id="sliceChart"></canvas></div>
+  </div>
+
+  <!-- Model performance -->
+  <div class="section-label">Model performance — validation cohort</div>
+  <div class="model-note">
+    These metrics reflect aggregate performance on the held-out validation set (n=420 scans), not this individual scan. They characterise how reliable the model's predictions are in general.
+  </div>
+  <div class="four-col">
+    <div class="metric-card"><div class="metric-val">0.847</div><div class="metric-lbl">Dice (val. set)</div></div>
+    <div class="metric-card"><div class="metric-val">0.792</div><div class="metric-lbl">IoU (val. set)</div></div>
+    <div class="metric-card"><div class="metric-val">0.891</div><div class="metric-lbl">Sensitivity</div></div>
+    <div class="metric-card"><div class="metric-val">0.963</div><div class="metric-lbl">Specificity</div></div>
+  </div>
+
+  <!-- Findings -->
+  <div class="section-label">Clinical findings summary</div>
+  <div class="card">
+    <div class="finding-row">
+      <div class="finding-icon icon-warn">
+        <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="none" stroke="#A32D2D" stroke-width="1.5"/><line x1="7" y1="4" x2="7" y2="7.5" stroke="#A32D2D" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="10" r="0.8" fill="#A32D2D"/></svg>
+      </div>
+      <div>
+        <div class="finding-title">Irregular margin morphology detected</div>
+        <div class="finding-desc">Spiculated borders consistent with invasive ductal carcinoma pattern</div>
+      </div>
+    </div>
+    <div class="finding-row">
+      <div class="finding-icon icon-warn">
+        <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="none" stroke="#A32D2D" stroke-width="1.5"/><line x1="7" y1="4" x2="7" y2="7.5" stroke="#A32D2D" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="10" r="0.8" fill="#A32D2D"/></svg>
+      </div>
+      <div>
+        <div class="finding-title">Heterogeneous internal enhancement</div>
+        <div class="finding-desc">Non-uniform kinetics on DCE-MRI, type III washout curve</div>
+      </div>
+    </div>
+    <div class="finding-row">
+      <div class="finding-icon icon-ok">
+        <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="none" stroke="#3B6D11" stroke-width="1.5"/><polyline points="4.5,7 6.5,9 9.5,5" fill="none" stroke="#3B6D11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="finding-title">No axillary lymphadenopathy</div>
+        <div class="finding-desc">Regional nodes appear within normal limits on current acquisition</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="rpt-footer">
+    <span class="footer-txt">Model: BC-SegNet v2.4 &nbsp;·&nbsp; Threshold: 0.50</span>
+    <span class="footer-txt">For clinical review only — not a diagnostic substitute</span>
+  </div>
+
+</div>
+
+<div class="no-print" style="text-align:center;">
+  <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+  // Slice confidence chart
+  new Chart(document.getElementById('sliceChart'), {
+    type: 'line',
+    data: {
+      labels: ['S1','S2','S3','S4','S5','S6','S7','S8','S9','S10'],
+      datasets: [{
+        label: 'Lesion confidence',
+        data: [0.12, 0.38, 0.65, 0.82, 0.90, 0.87, 0.75, 0.55, 0.30, 0.09],
+        borderColor: '#E24B4A',
+        backgroundColor: 'rgba(226,75,74,0.07)',
+        borderWidth: 1.5,
+        pointRadius: 3,
+        pointBackgroundColor: '#E24B4A',
+        fill: true,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 }, color: '#6b6b67' }, grid: { display: false } },
+        y: { min: 0, max: 1, ticks: { font: { size: 10 }, color: '#6b6b67', callback: v => v.toFixed(1) }, grid: { color: 'rgba(0,0,0,0.06)' } }
+      }
+    }
+  });
+
+  // MRI canvas
+  function drawMRI(canvas) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const img = ctx.createImageData(w, h);
+    const seed = 42;
+    let s = seed;
+    function rand() { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 4294967296; }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const dx = x - w/2, dy = y - h/2;
+        const r = Math.sqrt(dx*dx + dy*dy);
+        let v = 0;
+        if (r < 58) v = 175 + 28*Math.sin(dx/5)*Math.cos(dy/5) + rand()*18;
+        if (r < 20 && dx > -5 && dy > -5) v = 215 + rand()*28;
+        const idx = (y*w+x)*4;
+        v = Math.min(255, Math.max(0, Math.round(v)));
+        img.data[idx]=v; img.data[idx+1]=v; img.data[idx+2]=v; img.data[idx+3]=255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // Predicted mask
+  function drawMask(canvas) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0,0,w,h);
+    const g = ctx.createRadialGradient(w/2+2, h/2-2, 3, w/2+2, h/2-2, 22);
+    g.addColorStop(0,   'rgba(255,255,255,1)');
+    g.addColorStop(0.6, 'rgba(255,255,255,0.88)');
+    g.addColorStop(1,   'rgba(255,255,255,0.25)');
+    ctx.beginPath();
+    ctx.ellipse(w/2+2, h/2-2, 22, 18, 0.3, 0, Math.PI*2);
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  // Confidence overlay
+  function drawOverlay(canvas) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const img = ctx.createImageData(w, h);
+    const seed = 42;
+    let s = seed;
+    function rand() { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 4294967296; }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const dx = x - w/2, dy = y - h/2;
+        const r = Math.sqrt(dx*dx + dy*dy);
+        let rv = 0, gv = 0, bv = 0;
+        if (r < 58) { rv = 155; gv = 155; bv = 155; }
+        const cx = w/2+2, cy = h/2-2;
+        const ex = (x-cx)/22, ey = (y-cy)/18;
+        const dist = Math.sqrt(ex*ex + ey*ey);
+        if (dist < 1) {
+          const conf = Math.max(0, 1 - dist);
+          if (conf > 0.6) {
+            rv = Math.round(155 + (226-155)*conf);
+            gv = Math.round(155 * (1 - conf*0.82));
+            bv = Math.round(155 * (1 - conf*0.82));
+          } else if (conf > 0.35) {
+            rv = Math.round(155 + (186-155)*conf);
+            gv = Math.round(155 * (1 - conf*0.25) + 117*conf*0.5);
+            bv = Math.round(155 * (1 - conf*0.55));
+          } else {
+            rv = Math.round(155 * (1 - conf*0.3) + 55*conf);
+            gv = Math.round(155 * (1 - conf*0.15) + 138*conf*0.4);
+            bv = Math.round(155 + (221-155)*conf);
+          }
+        }
+        const idx = (y*w+x)*4;
+        img.data[idx]=Math.min(255,rv); img.data[idx+1]=Math.min(255,gv); img.data[idx+2]=Math.min(255,bv); img.data[idx+3]=255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  drawMRI(document.getElementById('c1'));
+  drawMask(document.getElementById('c2'));
+  drawOverlay(document.getElementById('c3'));
+</script>
+</body>
+</html>

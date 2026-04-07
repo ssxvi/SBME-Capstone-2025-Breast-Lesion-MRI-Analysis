@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MRI Analysis Report — {{ report.case_id }}</title>
+<style>
+  :root {
+    --bg:       #0f0f1a;
+    --surface:  #1a1a2e;
+    --border:   #2a2a4a;
+    --accent:   #6c63ff;
+    --danger:   #e05c5c;
+    --success:  #4caf82;
+    --warning:  #e0a94a;
+    --text:     #e2e2f0;
+    --muted:    #8888aa;
+    --radius:   10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .page { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+  /* ── Header ───────────────────────────────────────────────── */
+  header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.25rem; margin-bottom: 2rem;
+    flex-wrap: wrap; gap: 1rem;
+  }
+  .logo { font-size: 1.05rem; font-weight: 700; color: var(--accent); letter-spacing: .04em; }
+  .header-meta { text-align: right; color: var(--muted); font-size: 12px; }
+  .header-meta strong { display: block; color: var(--text); font-size: 1rem; }
+
+  /* ── Impression banner ─────────────────────────────────────── */
+  .impression {
+    display: flex; align-items: center; gap: 1rem;
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+    border: 1px solid;
+  }
+  .impression.no-lesion  { background: #1a2e1f; border-color: var(--success); }
+  .impression.benign     { background: #1f2a1a; border-color: #7ac46a; }
+  .impression.malignant  { background: #2e1a1a; border-color: var(--danger); }
+  .impression.error      { background: #2e1f1a; border-color: var(--warning); }
+  .impression .dot {
+    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+  }
+  .impression.no-lesion .dot { background: var(--success); }
+  .impression.benign    .dot { background: #7ac46a; }
+  .impression.malignant .dot { background: var(--danger); }
+  .impression.error     .dot { background: var(--warning); }
+  .impression .verdict  { font-size: 1.1rem; font-weight: 600; }
+
+  /* ── Section cards ─────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .card h2 {
+    font-size: .7rem; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 1rem; padding-bottom: .5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Stat grid ─────────────────────────────────────────────── */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; }
+  .stat {
+    background: var(--bg); border-radius: 6px; padding: .75rem 1rem;
+    border: 1px solid var(--border);
+  }
+  .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+  .stat .value { font-size: 1.3rem; font-weight: 600; margin-top: .15rem; }
+  .stat .value.positive { color: var(--danger); }
+  .stat .value.negative { color: var(--success); }
+  .stat .value.benign   { color: #7ac46a; }
+  .stat .value.malignant { color: var(--danger); }
+  .stat .sub { font-size: 11px; color: var(--muted); margin-top: .1rem; }
+
+  /* ── Probability bar ────────────────────────────────────────── */
+  .prob-row { display: flex; align-items: center; gap: .75rem; margin-top: .5rem; }
+  .prob-row .prob-label { width: 90px; font-size: 12px; color: var(--muted); }
+  .bar-track {
+    flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;
+  }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+  .bar-fill.accent  { background: var(--accent); }
+  .bar-fill.danger  { background: var(--danger); }
+  .bar-fill.success { background: var(--success); }
+  .bar-fill.benign  { background: #7ac46a; }
+  .prob-pct { width: 42px; text-align: right; font-size: 12px; color: var(--muted); }
+
+  /* ── Figures ────────────────────────────────────────────────── */
+  .figure-wrap { margin-top: .75rem; border-radius: 6px; overflow: hidden; }
+  .figure-wrap img { width: 100%; display: block; border-radius: 6px; }
+
+  /* ── Skipped badge ──────────────────────────────────────────── */
+  .skipped {
+    display: inline-block; padding: .2rem .6rem;
+    background: var(--border); border-radius: 4px;
+    font-size: 11px; color: var(--muted);
+  }
+
+  /* ── Error block ────────────────────────────────────────────── */
+  .error-block {
+    background: #2e1a1a; border: 1px solid var(--danger);
+    border-radius: 6px; padding: .75rem 1rem;
+    font-family: monospace; font-size: 11px; white-space: pre-wrap;
+    color: #f0a0a0; max-height: 200px; overflow: auto;
+  }
+
+  /* ── Footer ─────────────────────────────────────────────────── */
+  footer {
+    margin-top: 3rem; padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 11px;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem;
+  }
+
+  /* ── Print overrides ────────────────────────────────────────── */
+  @media print {
+    body { background: #fff; color: #111; }
+    .card { border-color: #ccc; background: #fafafa; page-break-inside: avoid; }
+    .impression { border-color: #999; background: #eee; }
+    .stat { background: #fff; border-color: #ddd; }
+    .bar-track { background: #ddd; }
+    header, footer { color: #555; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header>
+    <div>
+      <div class="logo">MRI Analysis Pipeline</div>
+      <div style="color:var(--muted); font-size:12px; margin-top:.25rem;">
+        Automated breast MRI evaluation · EfficientNet + nnUNet
+      </div>
+    </div>
+    <div class="header-meta">
+      <strong>{{ report.case_id }}</strong>
+      Generated {{ report.timestamp }}
+    </div>
+  </header>
+
+  <!-- ── Impression banner ──────────────────────────────────── -->
+  {% if report.error_message %}
+  <div class="impression error">
+    <div class="dot"></div>
+    <div>
+      <div class="verdict">Pipeline Error</div>
+      <div style="font-size:12px; color:var(--muted); margin-top:.2rem;">
+        One or more stages failed. Partial results may appear below.
+      </div>
+    </div>
+  </div>
+  {% elif not report.lesion_detected %}
+  <div class="impression no-lesion">
+    <div class="dot"></div>
+    <div>
+      <div class="verdict">No lesion detected</div>
+      <div style="font-size:12px; color:var(--muted); margin-top:.2rem;">
+        Lesion classifier did not identify a lesion in this study.
+      </div>
+    </div>
+  </div>
+  {% elif report.malignancy_label == "malignant" %}
+  <div class="impression malignant">
+    <div class="dot"></div>
+    <div>
+      <div class="verdict">Malignant lesion detected</div>
+      <div style="font-size:12px; color:var(--muted); margin-top:.2rem;">
+        Lesion identified and classified as malignant. Clinical review recommended.
+      </div>
+    </div>
+  </div>
+  {% elif report.malignancy_label == "benign" %}
+  <div class="impression benign">
+    <div class="dot"></div>
+    <div>
+      <div class="verdict">Benign lesion detected</div>
+      <div style="font-size:12px; color:var(--muted); margin-top:.2rem;">
+        Lesion identified and classified as benign.
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="impression no-lesion">
+    <div class="dot"></div>
+    <div>
+      <div class="verdict">Lesion detected — malignancy assessment incomplete</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Stage 2: Lesion Detection ─────────────────────────── -->
+  <div class="card">
+    <h2>Stage 2 — Lesion Detection</h2>
+    {% if report.lesion_detected is not none %}
+    <div class="stats" style="margin-bottom:1rem;">
+      <div class="stat">
+        <div class="label">Result</div>
+        <div class="value {{ 'positive' if report.lesion_detected else 'negative' }}">
+          {{ "Lesion" if report.lesion_detected else "No lesion" }}
+        </div>
+      </div>
+      <div class="stat">
+        <div class="label">Confidence</div>
+        <div class="value">{{ "%.1f"|format(report.lesion_confidence * 100) }}%</div>
+      </div>
+    </div>
+    {% if report.lesion_probabilities %}
+    <div>
+      <div class="prob-row">
+        <span class="prob-label">No lesion</span>
+        <div class="bar-track"><div class="bar-fill success" style="width:{{ (report.lesion_probabilities[0]*100)|round|int }}%"></div></div>
+        <span class="prob-pct">{{ "%.1f"|format(report.lesion_probabilities[0]*100) }}%</span>
+      </div>
+      <div class="prob-row">
+        <span class="prob-label">Lesion</span>
+        <div class="bar-track"><div class="bar-fill danger" style="width:{{ (report.lesion_probabilities[1]*100)|round|int }}%"></div></div>
+        <span class="prob-pct">{{ "%.1f"|format(report.lesion_probabilities[1]*100) }}%</span>
+      </div>
+    </div>
+    {% endif %}
+    {% else %}
+    <span class="skipped">Not run</span>
+    {% endif %}
+  </div>
+
+  <!-- ── Stage 3: Segmentation ──────────────────────────────── -->
+  <div class="card">
+    <h2>Stage 3 — Segmentation (nnUNet)</h2>
+    {% if report.segmentation_run %}
+    <div class="stats" style="margin-bottom:{% if report.mask_figure_b64 %}1rem{% else %}0{% endif %};">
+      <div class="stat">
+        <div class="label">Lesion voxels</div>
+        <div class="value">{{ report.lesion_volume_voxels | default("—") }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Mask file</div>
+        <div class="value" style="font-size:.75rem; word-break:break-all;">
+          {{ report.segmentation_mask_path | default("—") }}
+        </div>
+      </div>
+    </div>
+    {% if report.mask_figure_b64 %}
+    <div class="figure-wrap">
+      <img src="data:image/png;base64,{{ report.mask_figure_b64 }}" alt="Segmentation overlay">
+    </div>
+    {% endif %}
+    {% elif report.lesion_detected %}
+    <span class="skipped">Segmentation skipped (--skip-seg flag)</span>
+    {% else %}
+    <span class="skipped">Skipped — no lesion detected in Stage 2</span>
+    {% endif %}
+  </div>
+
+  <!-- ── Stage 4: Malignancy Classification ─────────────────── -->
+  <div class="card">
+    <h2>Stage 4 — Malignancy Classification</h2>
+    {% if report.malignancy_label is not none %}
+    <div class="stats" style="margin-bottom:1rem;">
+      <div class="stat">
+        <div class="label">Classification</div>
+        <div class="value {{ report.malignancy_label }}">
+          {{ report.malignancy_label | capitalize }}
+        </div>
+      </div>
+      <div class="stat">
+        <div class="label">Confidence</div>
+        <div class="value">{{ "%.1f"|format(report.malignancy_confidence * 100) }}%</div>
+        <div class="sub">ROI-cropped input</div>
+      </div>
+    </div>
+    {% if report.malignancy_probabilities %}
+    <div>
+      <div class="prob-row">
+        <span class="prob-label">Benign</span>
+        <div class="bar-track"><div class="bar-fill benign" style="width:{{ (report.malignancy_probabilities[0]*100)|round|int }}%"></div></div>
+        <span class="prob-pct">{{ "%.1f"|format(report.malignancy_probabilities[0]*100) }}%</span>
+      </div>
+      <div class="prob-row">
+        <span class="prob-label">Malignant</span>
+        <div class="bar-track"><div class="bar-fill danger" style="width:{{ (report.malignancy_probabilities[1]*100)|round|int }}%"></div></div>
+        <span class="prob-pct">{{ "%.1f"|format(report.malignancy_probabilities[1]*100) }}%</span>
+      </div>
+    </div>
+    {% endif %}
+    {% else %}
+    <span class="skipped">Skipped — no lesion detected in Stage 2</span>
+    {% endif %}
+  </div>
+
+  <!-- ── MIP Channels ───────────────────────────────────────── -->
+  {% if report.mip_figure_b64 %}
+  <div class="card">
+    <h2>Input MIP Channels</h2>
+    <div class="figure-wrap">
+      <img src="data:image/png;base64,{{ report.mip_figure_b64 }}" alt="MIP channels">
+    </div>
+    <div style="margin-top:.6rem; font-size:11px; color:var(--muted);">
+      Joint-normalized subtraction MIPs fed to both EfficientNet classifiers.
+      Channel 3 (Post2 norm.) is also used as the base for segmentation overlay.
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Error details ──────────────────────────────────────── -->
+  {% if report.error_message %}
+  <div class="card">
+    <h2>Error Details</h2>
+    <div class="error-block">{{ report.error_message }}</div>
+  </div>
+  {% endif %}
+
+  <!-- ── Disclaimer ─────────────────────────────────────────── -->
+  <div style="margin-top:1.5rem; padding:1rem; background:var(--surface);
+              border:1px solid var(--border); border-radius:var(--radius);
+              font-size:11px; color:var(--muted); line-height:1.7;">
+    <strong style="color:var(--text);">Research use only.</strong>
+    This report is generated by an automated AI pipeline and is intended for
+    research and development purposes only. It has not been validated for
+    clinical use and must not be used to inform diagnostic or treatment decisions
+    without review by a qualified clinician.
+  </div>
+
+  <footer>
+    <span>EfficientNet-B0 (lesion &amp; malignancy) · nnUNet (segmentation)</span>
+    <span>Case: {{ report.case_id }} · {{ report.timestamp }}</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+    "name": "Dataset001_HYBRID",
+    "description": "Hybrid FastMRI (no-lesion) + AMBL (benign/malignant) breast MRI dataset",
+    "reference": "",
+    "licence": "",
+    "release": "1.0",
+    "channel_names": {
+        "0": "pre",
+        "1": "post1",
+        "2": "post2"
+    },
+    "labels": {
+        "background": 0,
+        "lesion": 1
+    },
+    "numTraining": 149,
+    "file_ending": ".nii.gz"
+}

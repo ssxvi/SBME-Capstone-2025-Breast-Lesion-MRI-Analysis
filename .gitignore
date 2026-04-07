@@ -22,3 +22,17 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test Files
+
+*.nii.gz
+*.npy
+*.pt
+*.pth
+*.pyc
+*.env
+*.tar
+*.csv
+pipeline.v2/results/*
+pipeline.v2/uploads/*
+pipeline1/

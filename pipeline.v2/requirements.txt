@@ -1,0 +1,28 @@
+# Core
+numpy>=1.24
+scipy>=1.11
+
+# Medical imaging
+nibabel>=5.1
+pydicom>=2.4
+opencv-python-headless>=4.8
+
+# ML
+torch>=2.1
+torchvision>=0.16
+
+# nnUNet  (install separately — requires its own env setup)
+# nnunetv2>=2.2
+
+# API
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9   # required for FastAPI file uploads
+pydantic>=2.5
+
+# Report
+jinja2>=3.1
+matplotlib>=3.8
+
+# Preprocessing utils
+scikit-learn>=1.4
