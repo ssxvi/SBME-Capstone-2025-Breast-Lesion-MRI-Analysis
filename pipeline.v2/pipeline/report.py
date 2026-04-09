@@ -43,7 +43,7 @@ class PipelineReport:
     # Stage results (None = stage was skipped)
     lesion_detected:       Optional[bool]  = None
     lesion_confidence:     Optional[float] = None
-    lesion_probabilities:  Optional[list]  = None
+    lesion_probabilities:  Optional[list]  = None  # [P(no_lesion), P(lesion)]
 
     segmentation_run:       bool           = False
     segmentation_mask_path: Optional[str]  = None
@@ -51,7 +51,7 @@ class PipelineReport:
 
     malignancy_label:       Optional[str]  = None   # "malignant" | "benign"
     malignancy_confidence:  Optional[float] = None
-    malignancy_probabilities: Optional[list] = None
+    malignancy_probabilities: Optional[list] = None  # [P(benign), P(malignant)]
 
     # Embedded images (base64 PNG strings, filled by generate_figures)
     mip_figure_b64:  Optional[str] = None
@@ -82,11 +82,11 @@ def mip_channels_to_b64(mip_array: np.ndarray) -> str:
     mip_array: (4, 256, 256) float32
     """
     titles = ["Post1 − Pre", "Post2 − Pre", "Post2 − Post1", "Post2 (norm.)"]
-    fig, axes = plt.subplots(1, 4, figsize=(14, 3.5), facecolor="#1a1a2e")
+    fig, axes = plt.subplots(1, 4, figsize=(14, 3.5), facecolor="#ffffff")
 
     for ax, channel, title in zip(axes, mip_array, titles):
         ax.imshow(channel, cmap="gray", aspect="equal")
-        ax.set_title(title, color="white", fontsize=9, pad=4)
+        ax.set_title(title, color="#1a1a18", fontsize=9, pad=4)
         ax.axis("off")
 
     plt.tight_layout(pad=0.5)
@@ -106,11 +106,11 @@ def mask_overlay_to_b64(mip_array: np.ndarray, mask_3d: np.ndarray) -> str:
         mask_2d = cv2.resize(mask_2d, (post2_mip.shape[1], post2_mip.shape[0]),
                              interpolation=cv2.INTER_NEAREST)
 
-    fig, axes = plt.subplots(1, 2, figsize=(8, 4), facecolor="#1a1a2e")
-    axes[0].imshow(post2_mip,  cmap="gray");  axes[0].set_title("Post2 MIP",        color="white", fontsize=9); axes[0].axis("off")
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4), facecolor="#ffffff")
+    axes[0].imshow(post2_mip,  cmap="gray");  axes[0].set_title("Post2 MIP",        color="#1a1a18", fontsize=9); axes[0].axis("off")
     axes[1].imshow(post2_mip,  cmap="gray")
     axes[1].imshow(mask_2d,    cmap="Reds",   alpha=0.45)
-    axes[1].set_title("Segmentation overlay", color="white", fontsize=9)
+    axes[1].set_title("Segmentation overlay", color="#1a1a18", fontsize=9)
     axes[1].axis("off")
 
     plt.tight_layout(pad=0.5)
@@ -135,22 +135,32 @@ def render_report(report: PipelineReport, output_path: str | Path | None = None)
     Render the Jinja2 template with the report data and return the HTML string.
     If output_path is given, also write the HTML to that file.
     """
-    env = Environment(
-        loader=FileSystemLoader(str(TEMPLATES_DIR)),
-        autoescape=select_autoescape(["html"]),
-    )
-
     try:
+        env = Environment(
+            loader=FileSystemLoader(str(TEMPLATES_DIR)),
+            autoescape=select_autoescape(["html"]),
+        )
+        logger.info(f"Jinja2 environment loaded from {TEMPLATES_DIR}")
+
         template = env.get_template("report.html.j2")
+        logger.info("Template 'report.html.j2' loaded successfully")
     except Exception as exc:
-        logger.error(f"Could not load report template: {exc}")
+        logger.error(f"Could not load report template from {TEMPLATES_DIR}: {exc}")
         raise
 
-    html = template.render(report=report)
+    try:
+        html = template.render(report=report)
+        logger.info(f"Template rendered successfully ({len(html)} bytes)")
+    except Exception as exc:
+        logger.error(f"Template rendering failed: {exc}", exc_info=True)
+        raise
 
     if output_path:
-        Path(output_path).write_text(html, encoding="utf-8")
-        logger.info(f"Report written → {output_path}")
+        try:
+            Path(output_path).write_text(html, encoding="utf-8")
+            logger.info(f"Report written → {output_path}")
+        except Exception as exc:
+            logger.error(f"Failed to write report to {output_path}: {exc}", exc_info=True)
 
     return html
 

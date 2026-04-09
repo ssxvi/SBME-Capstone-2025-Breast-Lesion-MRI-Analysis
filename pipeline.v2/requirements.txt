@@ -7,9 +7,12 @@ nibabel>=5.1
 pydicom>=2.4
 opencv-python-headless>=4.8
 
-# ML
+# ML * NOTE - torch may need to be the cpu only version for nnunet to run but they are also on their own env so idk
+# Install CPU version with: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 torch>=2.1
 torchvision>=0.16
+efficientnet-pytorch>=0.7
+
 
 # nnUNet  (install separately — requires its own env setup)
 # nnunetv2>=2.2

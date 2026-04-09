@@ -6,15 +6,15 @@
 <title>MRI Analysis Report — {{ report.case_id }}</title>
 <style>
   :root {
-    --bg:       #0f0f1a;
-    --surface:  #1a1a2e;
-    --border:   #2a2a4a;
-    --accent:   #6c63ff;
-    --danger:   #e05c5c;
-    --success:  #4caf82;
-    --warning:  #e0a94a;
-    --text:     #e2e2f0;
-    --muted:    #8888aa;
+    --bg:       #f5f5f3;
+    --surface:  #ffffff;
+    --border:   #eeede9;
+    --accent:   #378ADD;
+    --danger:   #E24B4A;
+    --success:  #3B6D11;
+    --warning:  #BA7517;
+    --text:     #1a1a18;
+    --muted:    #6b6b67;
     --radius:   10px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -46,15 +46,15 @@
     margin-bottom: 2rem;
     border: 1px solid;
   }
-  .impression.no-lesion  { background: #1a2e1f; border-color: var(--success); }
-  .impression.benign     { background: #1f2a1a; border-color: #7ac46a; }
-  .impression.malignant  { background: #2e1a1a; border-color: var(--danger); }
-  .impression.error      { background: #2e1f1a; border-color: var(--warning); }
+  .impression.no-lesion  { background: #EAF3DE; border-color: var(--success); }
+  .impression.benign     { background: #EAF3DE; border-color: var(--success); }
+  .impression.malignant  { background: #FCEBEB; border-color: var(--danger); }
+  .impression.error      { background: #FAEEDA; border-color: var(--warning); }
   .impression .dot {
     width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
   }
   .impression.no-lesion .dot { background: var(--success); }
-  .impression.benign    .dot { background: #7ac46a; }
+  .impression.benign    .dot { background: var(--success); }
   .impression.malignant .dot { background: var(--danger); }
   .impression.error     .dot { background: var(--warning); }
   .impression .verdict  { font-size: 1.1rem; font-weight: 600; }
@@ -84,7 +84,7 @@
   .stat .value { font-size: 1.3rem; font-weight: 600; margin-top: .15rem; }
   .stat .value.positive { color: var(--danger); }
   .stat .value.negative { color: var(--success); }
-  .stat .value.benign   { color: #7ac46a; }
+  .stat .value.benign   { color: var(--success); }
   .stat .value.malignant { color: var(--danger); }
   .stat .sub { font-size: 11px; color: var(--muted); margin-top: .1rem; }
 
@@ -98,7 +98,7 @@
   .bar-fill.accent  { background: var(--accent); }
   .bar-fill.danger  { background: var(--danger); }
   .bar-fill.success { background: var(--success); }
-  .bar-fill.benign  { background: #7ac46a; }
+  .bar-fill.benign  { background: var(--success); }
   .prob-pct { width: 42px; text-align: right; font-size: 12px; color: var(--muted); }
 
   /* ── Figures ────────────────────────────────────────────────── */
@@ -114,10 +114,10 @@
 
   /* ── Error block ────────────────────────────────────────────── */
   .error-block {
-    background: #2e1a1a; border: 1px solid var(--danger);
+    background: #FCEBEB; border: 1px solid var(--danger);
     border-radius: 6px; padding: .75rem 1rem;
     font-family: monospace; font-size: 11px; white-space: pre-wrap;
-    color: #f0a0a0; max-height: 200px; overflow: auto;
+    color: var(--danger); max-height: 200px; overflow: auto;
   }
 
   /* ── Footer ─────────────────────────────────────────────────── */
@@ -130,12 +130,12 @@
 
   /* ── Print overrides ────────────────────────────────────────── */
   @media print {
-    body { background: #fff; color: #111; }
-    .card { border-color: #ccc; background: #fafafa; page-break-inside: avoid; }
-    .impression { border-color: #999; background: #eee; }
-    .stat { background: #fff; border-color: #ddd; }
-    .bar-track { background: #ddd; }
-    header, footer { color: #555; }
+    body { background: var(--bg); color: var(--text); }
+    .card { border-color: var(--border); background: var(--surface); page-break-inside: avoid; }
+    .impression { border-color: var(--border); background: var(--surface); }
+    .stat { background: var(--surface); border-color: var(--border); }
+    .bar-track { background: var(--border); }
+    header, footer { color: var(--muted); }
   }
 </style>
 </head>

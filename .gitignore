@@ -36,3 +36,5 @@ dist-ssr
 pipeline.v2/results/*
 pipeline.v2/uploads/*
 pipeline1/
+
+pipeline.v2/.venv_backend/*

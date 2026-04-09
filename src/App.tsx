@@ -23,8 +23,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 
@@ -173,11 +171,19 @@ function downloadBlob(filename: string, blob: Blob) {
 }
 
 function StatusBadge({ status }: { status: StepStatusValue }) {
-  if (status === "complete") return <Badge className="gap-1"><CheckCircle2 className="h-3.5 w-3.5" />Complete</Badge>;
-  if (status === "running") return <Badge variant="secondary" className="gap-1"><Loader2 className="h-3.5 w-3.5 animate-spin" />Running</Badge>;
+  if (status === "complete") return <Badge className="gap-1 flex items-center bg-green-50 text-green-700 border-green-200"><CheckCircle2 className="h-3.5 w-3.5" />Complete</Badge>;
+  if (status === "running") return <Badge variant="secondary" className="gap-1 flex items-center"><Loader2 className="h-3.5 w-3.5 animate-spin" />Running</Badge>;
   if (status === "skipped") return <Badge variant="outline">Skipped</Badge>;
-  if (status === "error") return <Badge variant="destructive" className="gap-1"><AlertCircle className="h-3.5 w-3.5" />Error</Badge>;
-  return <Badge variant="outline">Pending</Badge>;
+  if (status === "error") return <Badge variant="destructive" className="gap-1 flex items-center"><AlertCircle className="h-3.5 w-3.5" />Error</Badge>;
+  return <Badge variant="outline" className="bg-slate-50">Pending</Badge>;
+}
+
+function getIconBgColor(status: StepStatusValue): string {
+  if (status === "complete") return "bg-green-100";
+  if (status === "running") return "bg-blue-100";
+  if (status === "error") return "bg-red-100";
+  if (status === "skipped") return "bg-slate-100";
+  return "bg-slate-50";
 }
 
 export default function BreastImagingPipelineUI() {
@@ -254,8 +260,11 @@ export default function BreastImagingPipelineUI() {
   const parseError = async (response: Response) => {
     try {
       const body = await response.json() as { detail?: string };
-      return body?.detail || `Request failed with status ${response.status}`;
+      return body?.detail || `Request failed (${response.status})`;
     } catch {
+      if (response.status === 0 || response.statusText === "error") {
+        return "Connection error: Unable to reach the server. Please check your internet connection and try again.";
+      }
       return `Request failed with status ${response.status}`;
     }
   };
@@ -456,7 +465,20 @@ export default function BreastImagingPipelineUI() {
       setValidationMessage("Pipeline analysis complete!");
     } catch (error) {
       console.error(error);
-      const message = error instanceof Error ? error.message : "Pipeline execution failed.";
+      let message = "Pipeline execution failed.";
+
+      if (error instanceof Error) {
+        if (error.message.includes("fetch")) {
+          message = "Unable to connect to the pipeline server. Please ensure the backend is running and try again.";
+        } else if (error.message.includes("timeout")) {
+          message = "Pipeline took too long to complete. Please try again or contact support if the issue persists.";
+        } else if (error.message.includes("at least 3")) {
+          message = error.message;
+        } else {
+          message = error.message;
+        }
+      }
+
       setValidationMessage(message);
       markStep("validate", "error");
     } finally {
@@ -489,7 +511,12 @@ export default function BreastImagingPipelineUI() {
       }
     } catch (error) {
       console.error(error);
-      const message = error instanceof Error ? error.message : "Export failed.";
+      let message = "Export failed.";
+      if (error instanceof Error) {
+        message = error.message.includes("blob")
+          ? "Failed to create report file. Try again or contact support."
+          : error.message;
+      }
       setValidationMessage(message);
     }
   };
@@ -525,7 +552,7 @@ export default function BreastImagingPipelineUI() {
               <CardHeader>
                 <CardTitle>1. Input and pipeline settings</CardTitle>
                 <CardDescription>
-                  This UI is wired as a frontend prototype. Replace the mocked delays and outputs with your backend endpoints when the pipeline is ready.
+                  Please upload 3 T1 MRI images in order of Pre, Post1, and Post2. 
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -540,17 +567,6 @@ export default function BreastImagingPipelineUI() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Report export format</Label>
-                    <RadioGroup value={reportFormat} onValueChange={setReportFormat} className="flex gap-6 pt-2">
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="csv" id="csv" />
-                        <Label htmlFor="csv">CSV</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="json" id="json" />
-                        <Label htmlFor="json">JSON</Label>
-                      </div>
-                    </RadioGroup>
                   </div>
                 </div>
 
@@ -571,10 +587,10 @@ export default function BreastImagingPipelineUI() {
                       </div>
                       <div>
                         <div className="font-medium">Upload NIfTI file or DICOM series</div>
-                        <div className="text-sm text-slate-500">For DICOM, select all files from one series together.</div>
+                        <div className="text-sm text-slate-600">For DICOM, select all files from one series together.</div>
                       </div>
                       <div className="flex flex-wrap justify-center gap-3">
-                        <Button onClick={() => inputRef.current?.click()}>
+                        <Button onClick={() => inputRef.current?.click()} className="flex items-center">
                           <FolderOpen className="mr-2 h-4 w-4" />
                           Choose files
                         </Button>
@@ -601,18 +617,6 @@ export default function BreastImagingPipelineUI() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between rounded-2xl border bg-white p-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="external-parts" className="text-sm font-medium">
-                      Does the image include external chest parts?
-                    </Label>
-                    <p className="text-sm text-slate-500">
-                      If enabled, the UI routes the case to your manual cropping script before classification.
-                    </p>
-                  </div>
-                  <Switch id="external-parts" checked={hasExternalChest} onCheckedChange={setHasExternalChest} />
-                </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="notes">Run notes</Label>
                   <Textarea
@@ -625,14 +629,14 @@ export default function BreastImagingPipelineUI() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  <Button onClick={runPipeline} disabled={isRunning}>
+                  <Button onClick={runPipeline} disabled={isRunning} className="flex items-center">
                     {isRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                     Run pipeline
                   </Button>
                   <Button variant="outline" onClick={resetPipeline} disabled={isRunning}>
                     Reset
                   </Button>
-                  <Button variant="outline" onClick={exportReport} disabled={!outputs?.reportRows?.length}>
+                  <Button variant="outline" onClick={exportReport} disabled={!outputs?.reportRows?.length} className="flex items-center">
                     <Download className="mr-2 h-4 w-4" />
                     Export report
                   </Button>
@@ -653,7 +657,7 @@ export default function BreastImagingPipelineUI() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-600">Overall progress</span>
-                    <span className="font-medium">{progress}%</span>
+                    <span className="font-semibold text-lg text-blue-600">{progress}%</span>
                   </div>
                   <Progress value={progress} />
                 </div>
@@ -662,19 +666,21 @@ export default function BreastImagingPipelineUI() {
                   {STEP_META.map((step, index) => {
                     const Icon = step.icon;
                     const stepKey = step.key as StepKey;
+                    const status = stepStatuses[stepKey];
+                    const iconBgColor = getIconBgColor(status);
                     return (
-                      <div key={step.key} className="rounded-2xl border bg-white p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex gap-3">
-                            <div className="mt-0.5 rounded-xl bg-slate-100 p-2">
+                      <div key={step.key} className={`rounded-2xl border p-4 transition-colors ${status === "pending" ? "bg-white" : "bg-white"}`}>
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`rounded-xl p-2 ${iconBgColor}`}>
                               <Icon className="h-4 w-4" />
                             </div>
-                            <div>
+                            <div className="flex-1">
                               <div className="font-medium">{index + 1}. {step.title}</div>
-                              <div className="text-sm text-slate-500">{step.desc}</div>
+                              <div className="text-xs text-slate-600">{step.desc}</div>
                             </div>
                           </div>
-                          <StatusBadge status={stepStatuses[stepKey]} />
+                          <StatusBadge status={status} />
                         </div>
                       </div>
                     );
@@ -687,26 +693,26 @@ export default function BreastImagingPipelineUI() {
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
             <Card className="rounded-2xl border-0 shadow-sm">
               <CardHeader>
-                <CardTitle>3. Mock outputs</CardTitle>
+                <CardTitle>3. Report Selector</CardTitle>
                 <CardDescription>
                   Current values are placeholder frontend outputs so your team can review the user journey before the backend is connected.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {!outputs ? (
-                  <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-slate-500">
+                  <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-slate-600">
                     No pipeline outputs yet. Upload a valid case and run the prototype.
                   </div>
                 ) : (
                   <>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border bg-white p-4">
-                        <div className="text-sm text-slate-500">Lesion screening</div>
+                        <div className="text-sm text-slate-600">Lesion screening</div>
                         <div className="mt-1 text-lg font-semibold">{outputs.summary.lesionLabel}</div>
                         <div className="text-sm text-slate-600">Probability: {(outputs.summary.lesionProbability * 100).toFixed(1)}%</div>
                       </div>
                       <div className="rounded-2xl border bg-white p-4">
-                        <div className="text-sm text-slate-500">Subtype classification</div>
+                        <div className="text-sm text-slate-600">Subtype classification</div>
                         <div className="mt-1 text-lg font-semibold">{outputs.summary.lesionTypeLabel}</div>
                         <div className="text-sm text-slate-600">
                           Probability: {outputs.summary.lesionTypeProbability !== null ? `${(outputs.summary.lesionTypeProbability * 100).toFixed(1)}%` : "N/A"}
@@ -715,16 +721,48 @@ export default function BreastImagingPipelineUI() {
                     </div>
 
                     <div className="rounded-2xl border bg-white p-4">
-                      <div className="text-sm text-slate-500">Segmentation result</div>
+                      <div className="text-sm text-slate-600">Segmentation result</div>
                       <div className="mt-1 text-lg font-semibold">{outputs.summary.segmentationStatus}</div>
                       <div className="text-sm text-slate-600">Mask file: {outputs.summary.maskFilename}</div>
                     </div>
 
                     <Separator />
 
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => {
+                          if (jobId) {
+                            window.open(`${API_BASE_URL}/report/${jobId}`, "_blank");
+                          }
+                        }}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700"
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        Open HTML Report
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          const csv = [
+                            Object.keys(outputs.reportRows[0]).join(","),
+                            ...outputs.reportRows.map(row =>
+                              Object.values(row).map(v =>
+                                typeof v === "string" && v.includes(",") ? `"${v}"` : v
+                              ).join(",")
+                            ),
+                          ].join("\n");
+                          downloadBlob(`report_${new Date().toISOString().split("T")[0]}.csv`, new Blob([csv], { type: "text/csv" }));
+                        }}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download CSV
+                      </Button>
+                    </div>
+
                     <div className="rounded-2xl border bg-white p-4">
                       <div className="mb-2 font-medium">Preview of exported report</div>
-                      <pre className="overflow-x-auto rounded-xl bg-slate-50 p-3 text-xs leading-6 text-slate-700">
+                      <pre className="overflow-x-auto rounded-xl bg-slate-100 p-3 text-xs leading-6 text-slate-700">
                         {JSON.stringify(outputs.reportRows[0], null, 2)}
                       </pre>
                     </div>

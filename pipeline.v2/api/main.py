@@ -268,12 +268,19 @@ def get_report(run_id: str):
     """Serve the generated HTML report for a completed run."""
     entry = _job_store.get(run_id)
     if entry is None:
+        logger.warning(f"Report requested for unknown run_id: {run_id}")
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found.")
 
     result: Optional[PipelineRunResult] = entry.get("result")
-    if result is None or not result.report_html:
-        raise HTTPException(status_code=404, detail="Report not yet available.")
+    if result is None:
+        logger.warning(f"Report requested but result is None for run_id: {run_id}")
+        raise HTTPException(status_code=404, detail="Pipeline still running or failed before result was generated.")
 
+    if not result.report_html:
+        logger.warning(f"Report requested but report_html is empty for run_id: {run_id}. Status: {entry.get('status')}, Error: {result.error}")
+        raise HTTPException(status_code=404, detail=f"Report not yet available. Pipeline status: {entry.get('status')}. Error: {result.error}")
+
+    logger.info(f"Serving report for run_id: {run_id} ({len(result.report_html)} bytes)")
     return HTMLResponse(content=result.report_html)
 
 

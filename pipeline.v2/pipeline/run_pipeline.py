@@ -255,8 +255,10 @@ def run_pipeline(cfg: PipelineConfig) -> PipelineRunResult:
             error_msg  = error_msg,
         )
         logger.info(f"[{cfg.case_id}] Pipeline complete → {run.report.overall_impression}")
+        logger.info(f"[{cfg.case_id}] Report HTML generated: {len(run.report_html)} bytes, saved to {run.report_path}")
     except Exception as exc:
-        logger.error(f"[{cfg.case_id}] Report generation failed: {exc}")
+        logger.error(f"[{cfg.case_id}] Report generation failed: {exc}", exc_info=True)
+        run.report_html = ""
 
     return run
 
