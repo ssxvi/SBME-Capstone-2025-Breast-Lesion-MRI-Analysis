@@ -15,11 +15,11 @@ set -eo pipefail
 # ---- make logs dir ----
 mkdir -p logs
 
-# ---- activate your env ----
+# ---- activate env ----
 source ~/.bashrc
 conda activate /scratch/st-ilker-1/yfeng40/nnUNet/conda_envs/nnunet2_gpu
 
-# ---- nnU-Net paths (MUST be set in non-interactive sbatch jobs) ----
+# ---- nnU-Net paths ----
 export nnUNet_raw="/scratch/st-ilker-1/yfeng40/nnUNet/nnUNet_data/nnUNet_raw"
 export nnUNet_preprocessed="/scratch/st-ilker-1/yfeng40/nnUNet/nnUNet_data/nnUNet_preprocessed"
 export nnUNet_results="/scratch/st-ilker-1/yfeng40/nnUNet/nnUNet_data/nnUNet_results"
