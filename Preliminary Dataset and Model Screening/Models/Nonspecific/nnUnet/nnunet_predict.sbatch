@@ -45,6 +45,7 @@ for idx in ${!TRAINERS[@]}; do
   ls -ld "$MODEL_DIR" || exit 1
   mkdir -p "$OUTDIR"
 
+# Inference
   nnUNetv2_predict \
     -d "$DATASET" \
     -c "$CFG" \
