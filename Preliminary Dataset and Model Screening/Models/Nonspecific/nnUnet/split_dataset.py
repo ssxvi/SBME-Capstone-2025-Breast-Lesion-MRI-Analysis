@@ -4,24 +4,22 @@ import random
 from glob import glob
 
 # -----------------------------
-# Top-level nnUNet_raw directory (your current layout)
-# -----------------------------
 RAW_DIR = "/scratch/st-ilker-1/yfeng40/nnUNet/nnUNet_data/nnUNet_raw"
 
-# Source folders (moved one level higher, NOT inside Dataset503_ISPY1)
+# Source folders
 SOURCE_DIR = os.path.join(RAW_DIR, "images_bias-corrected_resampled_zscored_nifti")
 LABEL_SOURCE_DIR = os.path.join(RAW_DIR, "labelsTr_backup_before_resample")
 
-# Output dataset folder (nnU-Net expects imagesTr/labelsTr/etc inside here)
+# Output dataset folder
 DATASET_DIR = os.path.join(RAW_DIR, "Dataset503_ISPY1")
 
 IMAGES_TR = os.path.join(DATASET_DIR, "imagesTr")
 IMAGES_TS = os.path.join(DATASET_DIR, "imagesTs")
 LABELS_TR = os.path.join(DATASET_DIR, "labelsTr")
-LABELS_TS = os.path.join(DATASET_DIR, "labelsTs")  # keep if you want GT for test; nnU-Net doesn't require it
+LABELS_TS = os.path.join(DATASET_DIR, "labelsTs")  
 
 # -----------------------------
-# Recreate folders cleanly (avoid duplicates)
+# Recreate folders
 # -----------------------------
 for d in [IMAGES_TR, IMAGES_TS, LABELS_TR, LABELS_TS]:
     if os.path.exists(d):
@@ -29,7 +27,7 @@ for d in [IMAGES_TR, IMAGES_TS, LABELS_TR, LABELS_TS]:
     os.makedirs(d, exist_ok=True)
 
 # -----------------------------
-# Collect cases (folders) and keep ONLY those with labels
+# Collect cases (folders) and keep only those with labels
 # -----------------------------
 all_cases = sorted([c for c in os.listdir(SOURCE_DIR) if c.startswith("ISPY")])
 
@@ -94,7 +92,7 @@ def stage_case(case_id: str, img_dst: str, lbl_dst: str):
     shutil.copy2(label_src, os.path.join(lbl_dst, f"{case_id}.nii.gz"))
 
 # -----------------------------
-# Stage train (with progress)
+# Stage train
 # -----------------------------
 for i, c in enumerate(train_cases, 1):
     stage_case(c, IMAGES_TR, LABELS_TR)
@@ -102,7 +100,7 @@ for i, c in enumerate(train_cases, 1):
         print(f"Copied train {i}/{len(train_cases)}")
 
 # -----------------------------
-# Stage test (with progress)
+# Stage test
 # -----------------------------
 for i, c in enumerate(test_cases, 1):
     stage_case(c, IMAGES_TS, LABELS_TS)
