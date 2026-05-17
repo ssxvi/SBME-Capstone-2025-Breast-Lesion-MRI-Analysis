@@ -1,42 +1,4 @@
-# MRI Analysis Pipeline
-
-Automated breast MRI lesion detection, segmentation, and malignancy classification.
-
-```
-Stage 1 → Preprocessing (preprocess.py)
-Stage 2 → Lesion detection — EfficientNet-B0 binary (classify_lesion.py)
-Stage 3 → Segmentation    — nnUNet (segment.py)          [if lesion found]
-Stage 4 → Malignancy      — EfficientNet-B0 binary (classify_malignancy.py) [if lesion found]
-Stage 5 → HTML report     (report.py + templates/report.html.j2)
-```
-
----
-
-## Project layout
-
-```
-project/
-├── pipeline/
-│   ├── preprocess.py           # MIP computation (refactored from newprecomputemips.py)
-│   ├── classify_lesion.py      # Stage 2: lesion vs no-lesion EfficientNet
-│   ├── segment.py              # Stage 3: nnUNet inference via CLI subprocess
-│   ├── classify_malignancy.py  # Stage 4: malignant vs benign EfficientNet
-│   ├── report.py               # Stage 5: Jinja2 HTML report generator
-│   └── run_pipeline.py         # Orchestrator — chains all stages
-├── api/
-│   ├── main.py                 # FastAPI app (upload / run / result / report endpoints)
-│   └── schemas.py              # Pydantic request & response models
-├── templates/
-│   └── report.html.j2          # HTML report template
-├── weights/                    # Put your .pth model weights here
-│   ├── lesion_classifier.pth
-│   └── malignancy_classifier.pth
-├── uploads/                    # Auto-created — uploaded .nii.gz files land here
-├── results/                    # Auto-created — one subdirectory per run
-└── requirements.txt
-```
-
----
+# SBME CAPSTONE 2026 - Breast Lesion MRI Analysis Pipeline
 
 ## Installation
 
@@ -91,8 +53,6 @@ Weights are loaded as `torch.load(..., map_location="cpu")`. Both raw state dict
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Interactive docs: http://localhost:8000/docs
-
 ---
 
 ## API usage (from your React frontend)
@@ -120,6 +80,8 @@ const { run_id } = await fetch("/run", {
         pre_path:   prePath,
         post1_path: post1Path,
         post2_path: post2Path,
+        demo_mode: true,          // optional: simulate stages (fast demo)
+        demo_duration_sec: 12,    // optional: fake total runtime
     })
 }).then(r => r.json());
 ```
@@ -130,9 +92,13 @@ const { run_id } = await fetch("/run", {
 let result;
 while (true) {
     result = await fetch(`/result/${run_id}`).then(r => r.json());
+    // result.current_stage -> e.g. "segmentation"
+    // result.progress      -> 0.0 ... 1.0
     if (["complete", "failed"].includes(result.status)) break;
     await new Promise(r => setTimeout(r, 2000));  // poll every 2 s
 }
+
+// Final result includes segmentation.lesion_area_pixels (2-D projected mask area)
 ```
 
 ### 4. Fetch the HTML report
@@ -144,6 +110,18 @@ window.open(`/report/${run_id}`, "_blank");
 // Or embed in an <iframe>:
 // <iframe src={`/report/${run_id}`} />
 ```
+
+### 5. Demo mode notes
+
+- Set `demo_mode: true` in `/run` to simulate progress without running heavy segmentation. Can be changed in the UI directly.
+- The API still returns a realistic final payload (lesion, segmentation, malignancy, report).
+- Dedicated asset folder (default): `pipeline.v2/mock_segmentation/`
+- Supported assets in that folder:
+    - `segmentation_overlay.png` (or `.jpg` / `.jpeg`) for UI preview image
+    - `demo_mask.npy` for area/volume metrics
+    - `report.html` to override demo report HTML
+- You can override the folder via env var `PIPELINE_MOCK_SEGMENTATION_DIR`.
+- You can also provide a pre-made HTML report via env var `PIPELINE_DEMO_REPORT_HTML`.
 
 ---
 
@@ -208,4 +186,6 @@ Make sure your `dataset.json` `channel_names` matches this order:
 | `NNUNET_CONFIGURATION` | `3d_fullres` | nnUNet plan configuration |
 | `NNUNET_FOLD` | `0` | Which fold's weights to use |
 | `PIPELINE_WORKERS` | `2` | Concurrent pipeline jobs in the API |
+| `PIPELINE_MOCK_SEGMENTATION_DIR` | `pipeline.v2/mock_segmentation` | Folder containing accelerated-run segmentation assets |
+| `PIPELINE_DEMO_REPORT_HTML` | *(optional)* | Path to a prebuilt HTML report to serve in demo mode |
 | `SLURM_CPUS_PER_TASK` | `4` | Workers for batch MIP precomputation |

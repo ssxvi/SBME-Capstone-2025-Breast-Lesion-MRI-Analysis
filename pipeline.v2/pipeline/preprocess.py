@@ -1,9 +1,6 @@
 """
 pipeline/preprocess.py
 ----------------------
-Preprocessing for EfficientNet MIP inputs.
-Refactored from newprecomputemips.py to be importable by the pipeline orchestrator.
-
 Produces a (4, 256, 256) float32 numpy array per patient:
   channel 0 : MIP of (Post1 - Pre)
   channel 1 : MIP of (Post2 - Pre)

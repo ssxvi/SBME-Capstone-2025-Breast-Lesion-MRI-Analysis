@@ -4,9 +4,6 @@ pipeline/classify_malignancy.py
 Stage 4: Malignant vs Benign classification using EfficientNet.
 
 Runs only when Stage 2 confirmed a lesion is present.
-Optionally uses the nnUNet segmentation mask from Stage 3 to crop
-the MIP to the lesion bounding box before classification — this
-focuses the network on the region of interest rather than the full FOV.
 
 Input  : (4, 256, 256) MIP array  +  optional segmentation mask
 Output : MalignancyResult(label=0|1, confidence, probabilities)

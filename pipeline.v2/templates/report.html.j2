@@ -247,13 +247,13 @@
     {% if report.segmentation_run %}
     <div class="stats" style="margin-bottom:{% if report.mask_figure_b64 %}1rem{% else %}0{% endif %};">
       <div class="stat">
-        <div class="label">Lesion voxels</div>
-        <div class="value">{{ report.lesion_volume_voxels | default("—") }}</div>
-      </div>
-      <div class="stat">
-        <div class="label">Mask file</div>
-        <div class="value" style="font-size:.75rem; word-break:break-all;">
-          {{ report.segmentation_mask_path | default("—") }}
+        <div class="label">Lesion volume (mm³)</div>
+        <div class="value">
+          {% if report.lesion_volume_mm3 is not none %}
+            {{ "%.2f"|format(report.lesion_volume_mm3) }}
+          {% else %}
+            —
+          {% endif %}
         </div>
       </div>
     </div>

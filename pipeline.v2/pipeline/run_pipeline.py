@@ -170,6 +170,7 @@ def _stage_report(
         report.segmentation_run        = True
         report.segmentation_mask_path  = seg.mask_path
         report.lesion_volume_voxels    = seg.lesion_volume_voxels
+        report.lesion_volume_mm3       = seg.lesion_volume_mm3
 
     if malignancy is not None:
         report.malignancy_label          = malignancy.label_name

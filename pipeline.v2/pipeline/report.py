@@ -3,11 +3,6 @@ pipeline/report.py
 ------------------
 Stage 5: Generate an HTML report from pipeline results using Jinja2.
 
-Produces a self-contained HTML file that can be:
-  - Opened directly in a browser
-  - Served via the FastAPI /report endpoint
-  - Printed to PDF via the browser's print dialog (or headless Chrome)
-
 The template lives at templates/report.html.j2
 """
 
@@ -48,6 +43,7 @@ class PipelineReport:
     segmentation_run:       bool           = False
     segmentation_mask_path: Optional[str]  = None
     lesion_volume_voxels:   Optional[int]  = None
+    lesion_volume_mm3:      Optional[float] = None
 
     malignancy_label:       Optional[str]  = None   # "malignant" | "benign"
     malignancy_confidence:  Optional[float] = None

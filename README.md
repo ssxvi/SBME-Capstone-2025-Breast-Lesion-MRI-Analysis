@@ -1,73 +1,25 @@
-# React + TypeScript + Vite
+# Capstone 2026 - Breast Lesion MRI Analysis Pipeline and Interface
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The goal of our capstone project was to create a lightweight preliminary tool to preprocess, segment and classify breast MRI data, and generate a comphrensive report detailing lesion statistics. Our target demographic was unique as our client wanted our solution to be very lightweight, not utilise cloud computing, and be able to be run on a standard laptop without an external graphics card. 
 
-Currently, two official plugins are available:
+It is accompanied by a simple UI as well as CLI commands, detailed in ```/pipeline.v2/README.md```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Our main pipeline is build on Python and is self-hosting, and our frontend utilises React and FastAPI.
 
-## React Compiler
+Please note that installing nnUnet for segmentation can differ heavily per system, please go to <nnUnetv2 GITHUB>
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+# Training
 
-## Expanding the ESLint configuration
+Training was done on UBC's SOCKEYE cluster, over the ODELIA Challenge Dataset, FASTMRI Dataset, and AMBL.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+# Model Testing and selection
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Classification
+Our pipeline considered Resnet50, Efficientnet, and Densenet models for our classifiers, but found that EfficientNet had superior results for lesion detection and for malignancy detection. As such, only EfficientNet is used for classification, with two sets of weights for each classification step.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Segmentation
+nnUnet was our main contender for our segmentation model as it was highly praised from our client as well as had historically strong results. We found that the 3DFullRes configuration was required for our algorithm as our segmentation performed poorly with 2D configurations.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```

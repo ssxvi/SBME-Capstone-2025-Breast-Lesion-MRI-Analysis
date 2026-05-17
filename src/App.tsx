@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 
 const STEP_META = [
   {
@@ -52,16 +53,16 @@ const STEP_META = [
     icon: Brain,
   },
   {
-    key: "lesionType",
-    title: "Benign vs malignant",
-    desc: "Runs only when lesion probability exceeds threshold.",
-    icon: Activity,
-  },
-  {
     key: "segmentation",
     title: "nnU-Net segmentation",
     desc: "Generate lesion mask for lesion-positive cases.",
     icon: Layers,
+  },
+  {
+    key: "lesionType",
+    title: "Benign vs malignant",
+    desc: "Runs only when lesion probability exceeds threshold.",
+    icon: Activity,
   },
   {
     key: "report",
@@ -80,29 +81,6 @@ type JobStatusValue = "queued" | "running" | "completed" | "failed" | "cancelled
 type StepKey = "validate" | "convert" | "crop" | "lesionDetection" | "lesionType" | "segmentation" | "report";
 
 type StepStatuses = Record<StepKey, StepStatusValue>;
-
-type UploadResponse = {
-  upload_id: string;
-  detected_input_type: "nifti" | "dicom" | "invalid";
-  file_count: number;
-  validation: {
-    ok: boolean;
-    message: string;
-  };
-};
-
-type CreateJobResponse = {
-  job_id: string;
-  status: JobStatusValue;
-};
-
-type JobStatusResponse = {
-  job_id: string;
-  status: JobStatusValue;
-  progress: number;
-  steps: StepStatuses;
-  message: string;
-};
 
 type ReportRow = {
   pipeline_name: string;
@@ -130,6 +108,8 @@ type JobResultResponse = {
     lesionTypeProbability: number | null;
     segmentationStatus: string;
     maskFilename: string;
+    lesionAreaPixels: number | null;
+    segmentationPreviewUrl: string | null;
   };
   report_row: ReportRow;
 };
@@ -191,10 +171,12 @@ export default function BreastImagingPipelineUI() {
   const [files, setFiles] = useState<File[]>([]);
   const [inputType, setInputType] = useState<InputType>(null);
   const [validationMessage, setValidationMessage] = useState("No files uploaded yet.");
-  const [hasExternalChest, setHasExternalChest] = useState(false);
-  const [reportFormat, setReportFormat] = useState("csv");
+  const [hasExternalChest] = useState(false);
+  const [reportFormat] = useState("csv");
   const [pipelineName, setPipelineName] = useState("Breast Lesion MRI/Ultrasound Pipeline");
   const [notes, setNotes] = useState("");
+  const [demoMode, setDemoMode] = useState(true);
+  const [demoDurationSec, setDemoDurationSec] = useState(12);
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<StepStatuses>(defaultStepStatuses());
@@ -249,6 +231,73 @@ export default function BreastImagingPipelineUI() {
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  const stageToStepStatuses = (
+    stage: string | null | undefined,
+    hasLesion: boolean,
+    hasMalignancy: boolean,
+    hasSegmentation: boolean,
+    terminalStatus?: string
+  ): StepStatuses => {
+    const next = defaultStepStatuses();
+    const status = (terminalStatus || "").toLowerCase();
+    const isDemoRun = demoMode;
+
+    const setAllThrough = (keys: StepKey[]) => {
+      keys.forEach((k) => {
+        next[k] = "complete";
+      });
+    };
+
+    const normalizedStage = (stage || "").toLowerCase();
+
+    if (["pending", "queued"].includes(status) || normalizedStage === "queued") {
+      next.validate = "running";
+      return next;
+    }
+
+    if (normalizedStage === "preprocessing") {
+      next.validate = "complete";
+      next.convert = "running";
+      next.crop = "running";
+    } else if (normalizedStage === "lesion_classification") {
+      setAllThrough(["validate", "convert", "crop"]);
+      next.lesionDetection = "running";
+    } else if (normalizedStage === "segmentation") {
+      setAllThrough(["validate", "convert", "crop", "lesionDetection"]);
+      next.segmentation = "running";
+    } else if (normalizedStage === "malignancy_classification") {
+      setAllThrough(["validate", "convert", "crop", "lesionDetection"]);
+      if (hasSegmentation) {
+        next.segmentation = "complete";
+      } else {
+        next.segmentation = "running";
+      }
+      next.lesionType = "running";
+    } else if (normalizedStage === "report_generation") {
+      setAllThrough(["validate", "convert", "crop", "lesionDetection"]);
+      next.segmentation = hasSegmentation || isDemoRun ? "complete" : "skipped";
+      next.lesionType = hasMalignancy ? "complete" : hasLesion ? (isDemoRun ? "complete" : "running") : (isDemoRun ? "complete" : "skipped");
+      next.report = "running";
+    } else if (normalizedStage === "full_pipeline") {
+      next.validate = "complete";
+      next.convert = "complete";
+      next.crop = "complete";
+      next.lesionDetection = "running";
+    }
+
+    if (status === "complete") {
+      setAllThrough(["validate", "convert", "crop", "lesionDetection", "report"]);
+      next.segmentation = hasSegmentation || isDemoRun ? "complete" : "skipped";
+      next.lesionType = hasMalignancy || isDemoRun ? "complete" : "skipped";
+    }
+
+    if (status === "failed") {
+      next.report = "error";
+    }
+
+    return next;
+  };
+
   const resetPipeline = () => {
     setOutputs(null);
     setJobId(null);
@@ -298,8 +347,6 @@ export default function BreastImagingPipelineUI() {
       }
 
       const uploadedPaths: string[] = [];
-      const timepoints = ["Pre", "Post_1", "Post_2"];
-
       for (let i = 0; i < filesToUpload.length; i++) {
         const file = filesToUpload[i];
         const formData = new FormData();
@@ -345,6 +392,8 @@ export default function BreastImagingPipelineUI() {
           nnunet_dataset_id: "001",
           nnunet_configuration: "3d_fullres",
           nnunet_fold: "0",
+          demo_mode: demoMode,
+          demo_duration_sec: demoDurationSec,
         }),
       });
 
@@ -368,55 +417,43 @@ export default function BreastImagingPipelineUI() {
         }
 
         pipelineResult = await resultResponse.json();
-        const status = pipelineResult.status;
+        const status = String(pipelineResult.status || "").toLowerCase();
 
         console.log(`[Poll ${pollCount}] Status: ${status}`, pipelineResult);
 
-        // Mark convert as running/complete (DICOM→NIfTI conversion happens early)
-        if (status === "running" || status === "Running") {
-          markStep("convert", "running");
-          markStep("crop", "running");
-          setProgress(45);
-        }
+        const hasLesion = !!pipelineResult.lesion;
+        const hasMalignancy = !!pipelineResult.malignancy;
+        const hasSegmentation = !!pipelineResult.segmentation;
+        const staged = stageToStepStatuses(
+          pipelineResult.current_stage,
+          hasLesion,
+          hasMalignancy,
+          hasSegmentation,
+          status
+        );
+        setStepStatuses(staged);
 
-        // Update progress and steps based on results received
-        if (pipelineResult.lesion) {
-          markStep("convert", "complete");
-          markStep("crop", "complete");
-          markStep("lesionDetection", "complete");
-          setProgress(60);
-        }
-
-        if (pipelineResult.malignancy) {
-          markStep("lesionType", "complete");
-          setProgress(75);
-        } else if (pipelineResult.lesion && (status === "running" || status === "Running")) {
-          // Lesion found but malignancy still processing
-          markStep("lesionType", "running");
-        }
-
-        if (pipelineResult.segmentation) {
-          markStep("segmentation", "complete");
-          setProgress(85);
-        } else if (pipelineResult.lesion && (status === "running" || status === "Running")) {
-          // Lesion found but segmentation still processing
-          markStep("segmentation", "running");
+        if (typeof pipelineResult.progress === "number") {
+          setProgress(Math.round(pipelineResult.progress * 100));
         }
 
         // Check for terminal states
-        if (status === "complete" || status === "Complete") {
-          markStep("convert", "complete");
-          markStep("crop", "complete");
-          markStep("lesionDetection", "complete");
-          if (pipelineResult.malignancy) markStep("lesionType", "complete");
-          if (pipelineResult.segmentation) markStep("segmentation", "complete");
-          markStep("report", "complete");
+        if (status === "complete") {
+          setStepStatuses(
+            stageToStepStatuses(
+              "complete",
+              !!pipelineResult.lesion,
+              !!pipelineResult.malignancy,
+              !!pipelineResult.segmentation,
+              "complete"
+            )
+          );
           setProgress(100);
           console.log("Pipeline complete!");
           break;
         }
 
-        if (status === "failed" || status === "Failed") {
+        if (status === "failed") {
           throw new Error(pipelineResult.error || "Pipeline failed");
         }
 
@@ -434,8 +471,12 @@ export default function BreastImagingPipelineUI() {
         lesionProbability: pipelineResult.lesion?.confidence || 0,
         lesionTypeLabel: pipelineResult.malignancy?.label || null,
         lesionTypeProbability: pipelineResult.malignancy?.confidence || null,
-        segmentationStatus: pipelineResult.segmentation ? "Complete" : "Skipped",
-        maskFilename: pipelineResult.segmentation?.mask_path?.split("/").pop() || "N/A",
+        segmentationStatus: pipelineResult.segmentation || demoMode ? "Complete" : "Skipped",
+        maskFilename: pipelineResult.segmentation?.mask_path?.split(/[\\/]/).pop() || "N/A",
+        lesionAreaPixels: pipelineResult.segmentation?.lesion_area_pixels ?? null,
+        segmentationPreviewUrl: pipelineResult.segmentation?.preview_image_url
+          ? `${API_BASE_URL}${pipelineResult.segmentation.preview_image_url}`
+          : null,
       };
 
       const reportRow: ReportRow = {
@@ -451,8 +492,10 @@ export default function BreastImagingPipelineUI() {
         lesion_type_probability: pipelineResult.malignancy
           ? `${(pipelineResult.malignancy.confidence * 100).toFixed(1)}%`
           : "N/A",
-        segmentation_result: pipelineResult.segmentation ? "Success" : "Skipped",
-        segmentation_mask: pipelineResult.segmentation?.mask_path || "N/A",
+        segmentation_result: pipelineResult.segmentation
+          ? `Success${pipelineResult.segmentation?.lesion_area_pixels ? ` (${pipelineResult.segmentation.lesion_area_pixels} px)` : ""}`
+          : "Skipped",
+        segmentation_mask: "N/A",
         notes,
       };
 
@@ -556,9 +599,9 @@ export default function BreastImagingPipelineUI() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-1">
                   <div className="space-y-2">
-                    <Label htmlFor="pipeline-name">Pipeline name</Label>
+                    <Label htmlFor="pipeline-name">Patient Name</Label>
                     <Input
                       id="pipeline-name"
                       value={pipelineName}
@@ -566,9 +609,40 @@ export default function BreastImagingPipelineUI() {
                       placeholder="Enter pipeline title"
                     />
                   </div>
-                  <div className="space-y-2">
-                  </div>
                 </div>
+
+                <details className="rounded-2xl border bg-white p-4 text-sm">
+                  <summary className="cursor-pointer select-none text-sm font-medium text-slate-900">
+                    Advanced settings
+                  </summary>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="demo-mode">Demo mode</Label>
+                      <div className="flex items-center gap-3 rounded-2xl border bg-white px-3 py-2">
+                        <Switch id="demo-mode" checked={demoMode} onCheckedChange={setDemoMode} />
+                        <span className="text-sm text-slate-700">Use staged segmentation outputs for presentations</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="demo-duration">Demo runtime (seconds)</Label>
+                      <Input
+                        id="demo-duration"
+                        type="number"
+                        min={1}
+                        max={300}
+                        step={1}
+                        disabled={!demoMode || isRunning}
+                        value={demoDurationSec}
+                        onChange={(e) => {
+                          const next = Number(e.target.value);
+                          if (!Number.isNaN(next)) {
+                            setDemoDurationSec(Math.min(300, Math.max(1, Math.round(next))));
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </details>
 
                 <div className="space-y-3">
                   <Label>Upload imaging input</Label>
@@ -723,7 +797,18 @@ export default function BreastImagingPipelineUI() {
                     <div className="rounded-2xl border bg-white p-4">
                       <div className="text-sm text-slate-600">Segmentation result</div>
                       <div className="mt-1 text-lg font-semibold">{outputs.summary.segmentationStatus}</div>
-                      <div className="text-sm text-slate-600">Mask file: {outputs.summary.maskFilename}</div>
+                      <div className="text-sm text-slate-600">
+                        Segmented area: {outputs.summary.lesionAreaPixels !== null ? `${outputs.summary.lesionAreaPixels} px` : "N/A"}
+                      </div>
+                      {outputs.summary.segmentationPreviewUrl && (
+                        <div className="mt-3 overflow-hidden rounded-xl border bg-slate-50">
+                          <img
+                            src={outputs.summary.segmentationPreviewUrl}
+                            alt="Segmentation preview"
+                            className="h-auto w-full object-cover"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <Separator />

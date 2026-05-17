@@ -35,6 +35,7 @@ dist-ssr
 *.csv
 pipeline.v2/results/*
 pipeline.v2/uploads/*
-pipeline1/
+pipeline.v1/
 
 pipeline.v2/.venv_backend/*
+data

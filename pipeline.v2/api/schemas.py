@@ -44,7 +44,9 @@ class LesionResult(BaseModel):
 
 class SegmentationResult(BaseModel):
     lesion_volume_voxels: int
+    lesion_area_pixels:   Optional[int] = None
     mask_path:            str
+    preview_image_url:    Optional[str] = None
 
 
 class MalignancyResult(BaseModel):
@@ -72,6 +74,8 @@ class RunPipelineRequest(BaseModel):
     nnunet_dataset_id:     str   = "001"
     nnunet_configuration:  str   = "3d_fullres"
     nnunet_fold:           str   = "0"
+    demo_mode:             bool  = Field(False, description="Simulate a run for demos without executing heavy models")
+    demo_duration_sec:     float = Field(10.0, ge=1.0, le=300.0, description="Approximate simulated run duration when demo_mode is enabled")
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +87,7 @@ class PipelineRunResponse(BaseModel):
     run_id:  str
     case_id: str
     status:  PipelineStatus = PipelineStatus.pending
+    demo_mode: bool = False
 
 
 class PipelineResultResponse(BaseModel):
@@ -91,6 +96,8 @@ class PipelineResultResponse(BaseModel):
     case_id:    str
     status:     PipelineStatus
     error:      Optional[str] = None
+    current_stage: Optional[str] = None
+    progress:      Optional[float] = Field(None, ge=0.0, le=1.0)
 
     lesion:       Optional[LesionResult]       = None
     segmentation: Optional[SegmentationResult] = None

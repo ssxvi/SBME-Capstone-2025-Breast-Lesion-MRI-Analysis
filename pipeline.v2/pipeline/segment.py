@@ -70,6 +70,18 @@ class SegmentationResult:
     def lesion_volume_voxels(self) -> int:
         return int((self.mask > 0).sum())
 
+    @property
+    def voxel_volume_mm3(self) -> float:
+        """Per-voxel physical volume in mm^3 derived from the affine matrix."""
+        # Physical voxel size equals the norm of each spatial axis vector in affine.
+        dx, dy, dz = np.linalg.norm(self.affine[:3, :3], axis=0)
+        return float(dx * dy * dz)
+
+    @property
+    def lesion_volume_mm3(self) -> float:
+        """Lesion physical volume in mm^3."""
+        return float(self.lesion_volume_voxels * self.voxel_volume_mm3)
+
     def __str__(self) -> str:
         if self.has_lesion:
             return f"Segmentation: lesion found, {self.lesion_volume_voxels} voxels"
